@@ -1,0 +1,106 @@
+2025-03-25 18:43:03,385 - DEBUG - Using proactor: IocpProactor
+2025-03-25 18:43:31,001 - INFO - SDP json received: {'sdp': 'v=0\r\no=- 3951909781 3951909781 IN IP4 0.0.0.0\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\na=msid-semantic:WMS *\r\nm=application 39655 DTLS/SCTP 5000\r\nc=IN IP4 10.10.230.5\r\na=mid:0\r\na=sctpmap:5000 webrtc-datachannel 65535\r\na=max-message-size:65536\r\na=candidate:7dd3cf689e2790b1ad3e24ac056fc4cb 1 udp 2130706431 10.10.230.5 39655 typ host\r\na=candidate:808f0dad2b9d59f1b05c1bea74781815 1 udp 1694498815 194.44.160.146 39655 typ srflx raddr 10.10.230.5 rport 39655\r\na=end-of-candidates\r\na=ice-ufrag:F0ho\r\na=ice-pwd:sClCfbcU90qtwY59xRZq4g\r\na=fingerprint:sha-256 99:86:B4:D6:E0:D1:CA:B1:2F:68:FE:E4:6E:75:02:48:E3:D4:FD:6A:0D:54:B8:12:04:34:41:9F:AE:46:98:00\r\na=fingerprint:sha-384 63:36:AA:A2:A0:1A:05:BD:AE:2F:96:CA:FF:81:84:71:5C:8B:99:B5:2E:25:F2:99:7D:28:A6:68:71:F0:2A:DE:37:2E:14:31:CD:1F:12:82:85:4E:20:EE:FA:16:76:36\r\na=fingerprint:sha-512 4B:BB:8D:77:8F:F8:88:A3:00:84:3F:A3:2D:35:2A:5B:DE:D5:A1:D2:AC:0A:E8:08:BA:2C:80:B5:F8:8A:AD:94:11:B9:B6:9D:CC:ED:9A:5A:48:2C:5D:D4:68:8B:A6:D6:4B:5B:FC:10:F5:92:B8:89:2C:9F:A7:AE:B7:A6:09:6B\r\na=setup:actpass\r\n', 'type': 'offer'}
+2025-03-25 18:43:31,001 - DEBUG - RTCPeerConnection() setRemoteDescription(offer)
+v=0
+o=- 3951909781 3951909781 IN IP4 0.0.0.0
+s=-
+t=0 0
+a=group:BUNDLE 0
+a=msid-semantic:WMS *
+m=application 39655 DTLS/SCTP 5000
+c=IN IP4 10.10.230.5
+a=mid:0
+a=sctpmap:5000 webrtc-datachannel 65535
+a=max-message-size:65536
+a=candidate:7dd3cf689e2790b1ad3e24ac056fc4cb 1 udp 2130706431 10.10.230.5 39655 typ host
+a=candidate:808f0dad2b9d59f1b05c1bea74781815 1 udp 1694498815 194.44.160.146 39655 typ srflx raddr 10.10.230.5 rport 39655
+a=end-of-candidates
+a=ice-ufrag:F0ho
+a=ice-pwd:sClCfbcU90qtwY59xRZq4g
+a=fingerprint:sha-256 99:86:B4:D6:E0:D1:CA:B1:2F:68:FE:E4:6E:75:02:48:E3:D4:FD:6A:0D:54:B8:12:04:34:41:9F:AE:46:98:00
+a=fingerprint:sha-384 63:36:AA:A2:A0:1A:05:BD:AE:2F:96:CA:FF:81:84:71:5C:8B:99:B5:2E:25:F2:99:7D:28:A6:68:71:F0:2A:DE:37:2E:14:31:CD:1F:12:82:85:4E:20:EE:FA:16:76:36
+a=fingerprint:sha-512 4B:BB:8D:77:8F:F8:88:A3:00:84:3F:A3:2D:35:2A:5B:DE:D5:A1:D2:AC:0A:E8:08:BA:2C:80:B5:F8:8A:AD:94:11:B9:B6:9D:CC:ED:9A:5A:48:2C:5D:D4:68:8B:A6:D6:4B:5B:FC:10:F5:92:B8:89:2C:9F:A7:AE:B7:A6:09:6B
+a=setup:actpass
+
+2025-03-25 18:43:31,009 - INFO - RTCSessionDescription(sdp='v=0\r\no=- 3951909811 3951909811 IN IP4 0.0.0.0\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\na=msid-semantic:WMS *\r\nm=application 9 DTLS/SCTP 5000\r\nc=IN IP4 0.0.0.0\r\na=mid:0\r\na=sctpmap:5000 webrtc-datachannel 65535\r\na=max-message-size:65536\r\na=ice-ufrag:LeQR\r\na=ice-pwd:3Ltcsjw7wsoEoqLnVK9ZzB\r\na=fingerprint:sha-256 7E:86:E0:23:AC:6B:1C:8C:00:EE:B3:1B:E0:1B:EE:94:9A:F2:0F:13:52:0B:12:F1:37:3F:4E:D0:A5:76:53:B8\r\na=fingerprint:sha-384 53:12:1D:78:C4:EE:D3:F6:42:35:1A:CF:A7:B3:CC:F5:6D:59:EF:43:26:2C:8C:1A:4C:7D:32:9F:0C:C5:68:31:57:AB:27:13:AE:99:CE:1E:DC:E8:1E:39:27:02:2E:D1\r\na=fingerprint:sha-512 55:E5:21:4B:31:FA:B3:73:06:C1:61:4C:69:7D:1D:34:6A:F6:EF:C4:8D:51:CC:E1:4D:E0:6D:79:07:F9:04:19:57:23:45:79:EE:0D:1D:F2:B5:02:02:77:81:FE:DB:5D:E2:20:46:10:64:C8:A0:B9:28:AB:CE:A5:2D:1D:FD:04\r\na=setup:active\r\n', type='answer')
+2025-03-25 18:43:31,009 - DEBUG - RTCPeerConnection() setLocalDescription(answer)
+v=0
+o=- 3951909811 3951909811 IN IP4 0.0.0.0
+s=-
+t=0 0
+a=group:BUNDLE 0
+a=msid-semantic:WMS *
+m=application 9 DTLS/SCTP 5000
+c=IN IP4 0.0.0.0
+a=mid:0
+a=sctpmap:5000 webrtc-datachannel 65535
+a=max-message-size:65536
+a=ice-ufrag:LeQR
+a=ice-pwd:3Ltcsjw7wsoEoqLnVK9ZzB
+a=fingerprint:sha-256 7E:86:E0:23:AC:6B:1C:8C:00:EE:B3:1B:E0:1B:EE:94:9A:F2:0F:13:52:0B:12:F1:37:3F:4E:D0:A5:76:53:B8
+a=fingerprint:sha-384 53:12:1D:78:C4:EE:D3:F6:42:35:1A:CF:A7:B3:CC:F5:6D:59:EF:43:26:2C:8C:1A:4C:7D:32:9F:0C:C5:68:31:57:AB:27:13:AE:99:CE:1E:DC:E8:1E:39:27:02:2E:D1
+a=fingerprint:sha-512 55:E5:21:4B:31:FA:B3:73:06:C1:61:4C:69:7D:1D:34:6A:F6:EF:C4:8D:51:CC:E1:4D:E0:6D:79:07:F9:04:19:57:23:45:79:EE:0D:1D:F2:B5:02:02:77:81:FE:DB:5D:E2:20:46:10:64:C8:A0:B9:28:AB:CE:A5:2D:1D:FD:04
+a=setup:active
+
+2025-03-25 18:43:31,009 - DEBUG - RTCPeerConnection() iceGatheringState new -> gathering
+2025-03-25 18:43:31,023 - DEBUG - Connection(0) protocol(0) connection_made(<_ProactorDatagramTransport fd=1216>)
+2025-03-25 18:43:31,023 - INFO - Connection(0) Could not bind to 169.254.44.122 - [WinError 10049] The requested address is not valid in its context
+2025-03-25 18:43:31,023 - INFO - Connection(0) Could not bind to 169.254.155.116 - [WinError 10049] The requested address is not valid in its context
+2025-03-25 18:43:31,025 - INFO - Connection(0) Could not bind to 169.254.224.193 - [WinError 10049] The requested address is not valid in its context
+2025-03-25 18:43:31,025 - INFO - Connection(0) Could not bind to 169.254.102.123 - [WinError 10049] The requested address is not valid in its context
+2025-03-25 18:43:31,025 - DEBUG - Connection(0) protocol(1) connection_made(<_ProactorDatagramTransport fd=1220>)
+2025-03-25 18:43:31,025 - INFO - Connection(0) Could not bind to 169.254.96.13 - [WinError 10049] The requested address is not valid in its context
+2025-03-25 18:43:31,349 - DEBUG - Connection(0) protocol(0) > ('74.125.250.129', 19302) Message(message_method=Method.BINDING, message_class=Class.REQUEST, transaction_id=b's\xe7\xae\xab\xcbSmt\xab:\xf0 ')
+2025-03-25 18:43:31,349 - DEBUG - Connection(0) protocol(1) > ('74.125.250.129', 19302) Message(message_method=Method.BINDING, message_class=Class.REQUEST, transaction_id=b'P]n\xf5\xd6\xa7F\x05v\xf3^\xdb')
+2025-03-25 18:43:31,433 - DEBUG - Connection(0) protocol(1) < ('74.125.250.129', 19302) Message(message_method=Method.BINDING, message_class=Class.RESPONSE, transaction_id=b'P]n\xf5\xd6\xa7F\x05v\xf3^\xdb')
+2025-03-25 18:43:31,433 - DEBUG - Connection(0) protocol(0) < ('74.125.250.129', 19302) Message(message_method=Method.BINDING, message_class=Class.RESPONSE, transaction_id=b's\xe7\xae\xab\xcbSmt\xab:\xf0 ')
+2025-03-25 18:43:31,433 - DEBUG - RTCPeerConnection() iceGatheringState gathering -> complete
+2025-03-25 18:43:31,433 - DEBUG - RTCIceTransport(controlled) - new -> checking
+2025-03-25 18:43:31,433 - DEBUG - RTCPeerConnection() iceConnectionState new -> checking
+2025-03-25 18:43:31,433 - DEBUG - RTCPeerConnection() connectionState new -> connecting
+2025-03-25 18:43:31,433 - INFO - Connection state changed: connecting
+2025-03-25 18:43:31,433 - INFO - Connection(0) Check CandidatePair(('100.127.255.253', 53656) -> ('10.10.230.5', 39655)) State.FROZEN -> State.WAITING
+2025-03-25 18:43:31,433 - INFO - Connection(0) Check CandidatePair(('192.168.128.188', 53657) -> ('10.10.230.5', 39655)) State.FROZEN -> State.WAITING
+2025-03-25 18:43:31,433 - INFO - Connection(0) Check CandidatePair(('100.127.255.253', 53656) -> ('194.44.160.146', 39655)) State.FROZEN -> State.WAITING
+2025-03-25 18:43:31,433 - INFO - Connection(0) Check CandidatePair(('100.127.255.253', 53656) -> ('10.10.230.5', 39655)) State.WAITING -> State.IN_PROGRESS
+2025-03-25 18:43:31,433 - DEBUG - Connection(0) protocol(0) > ('10.10.230.5', 39655) Message(message_method=Method.BINDING, message_class=Class.REQUEST, transaction_id=b'^g*7\xb8b\x00\xfb\xb2-\x8ak')
+2025-03-25 18:43:31,461 - INFO - Connection(0) Check CandidatePair(('192.168.128.188', 53657) -> ('10.10.230.5', 39655)) State.WAITING -> State.IN_PROGRESS
+2025-03-25 18:43:31,461 - DEBUG - Connection(0) protocol(1) > ('10.10.230.5', 39655) Message(message_method=Method.BINDING, message_class=Class.REQUEST, transaction_id=b'(&z\x1f\xff/\xf6H\xa5\x10\xd4\x80')
+2025-03-25 18:43:31,493 - INFO - Connection(0) Check CandidatePair(('100.127.255.253', 53656) -> ('194.44.160.146', 39655)) State.WAITING -> State.IN_PROGRESS
+2025-03-25 18:43:31,493 - DEBUG - Connection(0) protocol(0) > ('194.44.160.146', 39655) Message(message_method=Method.BINDING, message_class=Class.REQUEST, transaction_id=b'\x0b\x1d\xfd\xf9\xaa\xec\xae\xba7)x3')
+2025-03-25 18:43:31,524 - INFO - Connection(0) Check CandidatePair(('192.168.128.188', 53657) -> ('194.44.160.146', 39655)) State.FROZEN -> State.IN_PROGRESS
+2025-03-25 18:43:31,524 - DEBUG - Connection(0) protocol(1) > ('194.44.160.146', 39655) Message(message_method=Method.BINDING, message_class=Class.REQUEST, transaction_id=b'\x81\xab\xa7-\xd6\xa4\x01\xd1%3\xc5\xa7')
+2025-03-25 18:43:31,928 - DEBUG - Connection(0) protocol(0) > ('10.10.230.5', 39655) Message(message_method=Method.BINDING, message_class=Class.REQUEST, transaction_id=b'^g*7\xb8b\x00\xfb\xb2-\x8ak')
+2025-03-25 18:43:31,975 - DEBUG - Connection(0) protocol(1) > ('10.10.230.5', 39655) Message(message_method=Method.BINDING, message_class=Class.REQUEST, transaction_id=b'(&z\x1f\xff/\xf6H\xa5\x10\xd4\x80')
+2025-03-25 18:43:32,007 - DEBUG - Connection(0) protocol(0) > ('194.44.160.146', 39655) Message(message_method=Method.BINDING, message_class=Class.REQUEST, transaction_id=b'\x0b\x1d\xfd\xf9\xaa\xec\xae\xba7)x3')
+2025-03-25 18:43:32,039 - DEBUG - Connection(0) protocol(1) > ('194.44.160.146', 39655) Message(message_method=Method.BINDING, message_class=Class.REQUEST, transaction_id=b'\x81\xab\xa7-\xd6\xa4\x01\xd1%3\xc5\xa7')
+2025-03-25 18:43:32,942 - DEBUG - Connection(0) protocol(0) > ('10.10.230.5', 39655) Message(message_method=Method.BINDING, message_class=Class.REQUEST, transaction_id=b'^g*7\xb8b\x00\xfb\xb2-\x8ak')
+2025-03-25 18:43:32,981 - DEBUG - Connection(0) protocol(1) > ('10.10.230.5', 39655) Message(message_method=Method.BINDING, message_class=Class.REQUEST, transaction_id=b'(&z\x1f\xff/\xf6H\xa5\x10\xd4\x80')
+2025-03-25 18:43:33,029 - DEBUG - Connection(0) protocol(0) > ('194.44.160.146', 39655) Message(message_method=Method.BINDING, message_class=Class.REQUEST, transaction_id=b'\x0b\x1d\xfd\xf9\xaa\xec\xae\xba7)x3')
+2025-03-25 18:43:33,029 - DEBUG - Connection(0) protocol(1) > ('194.44.160.146', 39655) Message(message_method=Method.BINDING, message_class=Class.REQUEST, transaction_id=b'\x81\xab\xa7-\xd6\xa4\x01\xd1%3\xc5\xa7')
+2025-03-25 18:43:34,961 - DEBUG - Connection(0) protocol(0) > ('10.10.230.5', 39655) Message(message_method=Method.BINDING, message_class=Class.REQUEST, transaction_id=b'^g*7\xb8b\x00\xfb\xb2-\x8ak')
+2025-03-25 18:43:34,993 - DEBUG - Connection(0) protocol(1) > ('10.10.230.5', 39655) Message(message_method=Method.BINDING, message_class=Class.REQUEST, transaction_id=b'(&z\x1f\xff/\xf6H\xa5\x10\xd4\x80')
+2025-03-25 18:43:35,041 - DEBUG - Connection(0) protocol(0) > ('194.44.160.146', 39655) Message(message_method=Method.BINDING, message_class=Class.REQUEST, transaction_id=b'\x0b\x1d\xfd\xf9\xaa\xec\xae\xba7)x3')
+2025-03-25 18:43:35,041 - DEBUG - Connection(0) protocol(1) > ('194.44.160.146', 39655) Message(message_method=Method.BINDING, message_class=Class.REQUEST, transaction_id=b'\x81\xab\xa7-\xd6\xa4\x01\xd1%3\xc5\xa7')
+2025-03-25 18:43:38,976 - DEBUG - Connection(0) protocol(0) > ('10.10.230.5', 39655) Message(message_method=Method.BINDING, message_class=Class.REQUEST, transaction_id=b'^g*7\xb8b\x00\xfb\xb2-\x8ak')
+2025-03-25 18:43:39,007 - DEBUG - Connection(0) protocol(1) > ('10.10.230.5', 39655) Message(message_method=Method.BINDING, message_class=Class.REQUEST, transaction_id=b'(&z\x1f\xff/\xf6H\xa5\x10\xd4\x80')
+2025-03-25 18:43:39,053 - DEBUG - Connection(0) protocol(0) > ('194.44.160.146', 39655) Message(message_method=Method.BINDING, message_class=Class.REQUEST, transaction_id=b'\x0b\x1d\xfd\xf9\xaa\xec\xae\xba7)x3')
+2025-03-25 18:43:39,053 - DEBUG - Connection(0) protocol(1) > ('194.44.160.146', 39655) Message(message_method=Method.BINDING, message_class=Class.REQUEST, transaction_id=b'\x81\xab\xa7-\xd6\xa4\x01\xd1%3\xc5\xa7')
+2025-03-25 18:43:46,988 - DEBUG - Connection(0) protocol(0) > ('10.10.230.5', 39655) Message(message_method=Method.BINDING, message_class=Class.REQUEST, transaction_id=b'^g*7\xb8b\x00\xfb\xb2-\x8ak')
+2025-03-25 18:43:46,991 - DEBUG - Connection(0) protocol(1) > ('10.10.230.5', 39655) Message(message_method=Method.BINDING, message_class=Class.REQUEST, transaction_id=b'(&z\x1f\xff/\xf6H\xa5\x10\xd4\x80')
+2025-03-25 18:43:47,059 - DEBUG - Connection(0) protocol(1) > ('194.44.160.146', 39655) Message(message_method=Method.BINDING, message_class=Class.REQUEST, transaction_id=b'\x81\xab\xa7-\xd6\xa4\x01\xd1%3\xc5\xa7')
+2025-03-25 18:43:47,060 - DEBUG - Connection(0) protocol(0) > ('194.44.160.146', 39655) Message(message_method=Method.BINDING, message_class=Class.REQUEST, transaction_id=b'\x0b\x1d\xfd\xf9\xaa\xec\xae\xba7)x3')
+2025-03-25 18:44:03,014 - DEBUG - Connection(0) protocol(1) > ('10.10.230.5', 39655) Message(message_method=Method.BINDING, message_class=Class.REQUEST, transaction_id=b'(&z\x1f\xff/\xf6H\xa5\x10\xd4\x80')
+2025-03-25 18:44:03,014 - DEBUG - Connection(0) protocol(0) > ('10.10.230.5', 39655) Message(message_method=Method.BINDING, message_class=Class.REQUEST, transaction_id=b'^g*7\xb8b\x00\xfb\xb2-\x8ak')
+2025-03-25 18:44:03,069 - DEBUG - Connection(0) protocol(0) > ('194.44.160.146', 39655) Message(message_method=Method.BINDING, message_class=Class.REQUEST, transaction_id=b'\x0b\x1d\xfd\xf9\xaa\xec\xae\xba7)x3')
+2025-03-25 18:44:03,069 - DEBUG - Connection(0) protocol(1) > ('194.44.160.146', 39655) Message(message_method=Method.BINDING, message_class=Class.REQUEST, transaction_id=b'\x81\xab\xa7-\xd6\xa4\x01\xd1%3\xc5\xa7')
+2025-03-25 18:44:30,848 - DEBUG - RTCIceTransport(controlled) - checking -> closed
+2025-03-25 18:44:30,848 - DEBUG - RTCPeerConnection() iceConnectionState checking -> closed
+2025-03-25 18:44:30,848 - DEBUG - RTCPeerConnection() connectionState connecting -> closed
+2025-03-25 18:44:30,848 - INFO - Connection state changed: closed
+2025-03-25 18:44:30,848 - DEBUG - RTCIceTransport(controlled) - closed -> failed
+2025-03-25 18:44:30,848 - DEBUG - RTCDtlsTransport(client) - State.NEW -> State.CONNECTING
+2025-03-25 18:44:30,848 - DEBUG - RTCDtlsTransport(client) x DTLS handshake failed (connection error)
+2025-03-25 18:44:30,848 - DEBUG - RTCDtlsTransport(client) - State.CONNECTING -> State.FAILED
+2025-03-25 18:44:30,848 - DEBUG - Connection(0) protocol(0) connection_lost(None)
+2025-03-25 18:44:30,848 - DEBUG - Connection(0) protocol(1) connection_lost(None)

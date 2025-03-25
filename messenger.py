@@ -1,16 +1,27 @@
 """messenger.py"""
 import json
 # import time
+import logging
 from datetime import datetime
 import sys
 import asyncio
 from aioconsole import ainput
-from aiortc import RTCPeerConnection, RTCSessionDescription, RTCDataChannel
+from aiortc import (RTCPeerConnection,
+                    RTCSessionDescription,
+                    RTCDataChannel,
+                    RTCConfiguration,
+                    RTCIceServer)
 
 
-# ICE_CONFIG = RTCConfiguration(
-#     iceServers=[RTCIceServer(urls=["stun:stun.l.google.com:19302"])]
-# )
+LOGGING_FILE = 'logging.log'
+logging.basicConfig(level=logging.DEBUG, filename=LOGGING_FILE, filemode='w',
+                    format="%(asctime)s - %(levelname)s - %(message)s")
+
+
+# Configure ICE with a STUN server.
+ICE_CONFIG = RTCConfiguration(
+    iceServers=[RTCIceServer(urls=["stun:stun.l.google.com:19302"])]
+)
 
 
 def read_sdp() -> RTCSessionDescription | None:
@@ -33,6 +44,8 @@ def read_sdp() -> RTCSessionDescription | None:
     except json.JSONDecodeError:
         return None
 
+    logging.info(f'SDP json received: {sdp_json}')
+
     return RTCSessionDescription(sdp=sdp_json["sdp"], type=sdp_json["type"])
 
 
@@ -54,7 +67,13 @@ def set_data_channel_events(data_channel: RTCDataChannel, open_event: asyncio.Ev
     """Set events behavior for data channel"""
 
     data_channel.on('error', lambda error: print("Data channel error:", error))
-    data_channel.on('message', lambda message: print(f'Peer ({datetime.now().strftime("%H:%M:%S")}): {message}'))
+
+    @data_channel.on('message')
+    def on_message(message):
+        print(f'Peer ({datetime.now().strftime("%H:%M:%S")}): {message}')
+        logging.debug(f'Message received: {message}')
+
+    # data_channel.on('message', lambda message: print(f'Peer ({datetime.now().strftime("%H:%M:%S")}): {message}'))
 
     @data_channel.on('open')
     def on_open():
@@ -65,6 +84,7 @@ def set_data_channel_events(data_channel: RTCDataChannel, open_event: asyncio.Ev
     @data_channel.on('close')
     def on_close():
         print('\nData channel was closed')
+        logging.warning('Exiting program, data channel closed')
         sys.exit(1)
 
 async def message_loop(data_channel: RTCDataChannel) -> None:
@@ -73,6 +93,7 @@ async def message_loop(data_channel: RTCDataChannel) -> None:
     while True:
         message = await ainput('You: ')
         if message:
+            logging.debug(f'Message sended: {message}')
             data_channel.send(message)
 
 
@@ -81,7 +102,7 @@ async def run_offer() -> None:
     data_channel_open_event = asyncio.Event()
 
     # Create peer connection
-    pc = RTCPeerConnection()
+    pc = RTCPeerConnection(configuration=ICE_CONFIG)
 
     # Create data channel and set its behavior on events
     dc = pc.createDataChannel('channel')
@@ -94,6 +115,7 @@ async def run_offer() -> None:
 
     # Create and set offer
     offer = await pc.createOffer()
+    logging.info(offer)
     await pc.setLocalDescription(offer)
 
     # Print offer JSON for user to copy and share with peer
@@ -127,17 +149,19 @@ async def run_answer() -> None:
     """Function for user who runs code as answer"""
 
     # Create peer connection
-    pc = RTCPeerConnection()
+    pc = RTCPeerConnection(configuration=ICE_CONFIG)
 
     # on_datacannel function will be executed when data channel received
     # from user who sent offer
     @pc.on('datachannel')
     def on_datachannel(data_channel):
         """Set behavior when data channel received"""
-        print("Data channel received.")
+        logging.info("Data channel received")
+        print("Data channel received")
         set_data_channel_events(data_channel)
-        if data_channel.readyState == "open":
-            print("Data channel is open")
+        # if data_channel.readyState == "open":
+            # logging.info("Data channel is open")
+            # print("Data channel is open")
 
         # Start a task for sending messages from the terminal.
         asyncio.create_task(message_loop(data_channel))
@@ -145,6 +169,7 @@ async def run_answer() -> None:
     # Set behavior for connection state change
     @pc.on("connectionstatechange")
     def on_connection_state_change():
+        logging.info(f"Connection state changed: {pc.connectionState}")
         print(f"Connection state changed: {pc.connectionState}")
 
 
@@ -157,6 +182,7 @@ async def run_answer() -> None:
 
     # Create and set answer as local desciption for peer connection
     answer = await pc.createAnswer()
+    logging.info(answer)
     await pc.setLocalDescription(answer)
 
     # Print answer JSON for user to copy and share with peer
@@ -179,6 +205,7 @@ async def run_answer() -> None:
 if __name__ == '__main__':
     if len(sys.argv) < 2 or sys.argv[1] not in ("offer", "answer"):
         print("Usage: python p2p_chat.py offer|answer")
+        logging.warning('Exiting program, incorrect command')
         sys.exit(1)
 
     role = sys.argv[1]
