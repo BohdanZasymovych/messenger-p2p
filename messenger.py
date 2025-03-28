@@ -1,6 +1,5 @@
 """messenger.py"""
 import json
-# import time
 import logging
 from datetime import datetime
 import sys
@@ -59,21 +58,46 @@ def get_sdp() -> RTCSessionDescription:
         sdp = read_sdp()
         if sdp is not None:
             break
-        print('Invalid JSON pasted, try again\n')
+        print('Invalid JSON pasted, try again:')
     return sdp
+
+
+def set_peer_connection_events(peer_connection: RTCPeerConnection):
+    """Set events behavior for data channel"""
+
+    @peer_connection.on("connectionstatechange")
+    def on_connection_state_change():
+        logging.info(f"Connection state changed: {peer_connection.connectionState}")
+        print(f"Connection state changed: {peer_connection.connectionState}")
+
+    @peer_connection.on("iceconnectionstatechange")
+    def on_ice_state_change():
+        logging.info(f"Ice connection state changed: {peer_connection.iceConnectionState}")
+        print(f"Ice connection state changed: {peer_connection.iceConnectionState}")
+
+    @peer_connection.on("icegatheringstatechange")
+    def on_ice_gathering_change():
+        logging.info(f"Ice gathering state changed: {peer_connection.iceGatheringState}")
+        print(f"Ice gathering state changed: {peer_connection.iceGatheringState}")
+
+    @peer_connection.on("signalingstatechange")
+    def on_signaling_state_change():
+        logging.info(f"Signaling state changed: {peer_connection.signalingState}")
+        print(f"Signaling state changed: {peer_connection.signalingState}")
 
 
 def set_data_channel_events(data_channel: RTCDataChannel, open_event: asyncio.Event=None) -> None:
     """Set events behavior for data channel"""
 
-    data_channel.on('error', lambda error: print("Data channel error:", error))
+    @data_channel.on("error")
+    def on_error(error):
+        print("Data channel error:", error)
+        logging.error(f"Data channel error: {error}")
 
     @data_channel.on('message')
     def on_message(message):
         print(f'Peer ({datetime.now().strftime("%H:%M:%S")}): {message}')
         logging.debug(f'Message received: {message}')
-
-    # data_channel.on('message', lambda message: print(f'Peer ({datetime.now().strftime("%H:%M:%S")}): {message}'))
 
     @data_channel.on('open')
     def on_open():
@@ -84,8 +108,9 @@ def set_data_channel_events(data_channel: RTCDataChannel, open_event: asyncio.Ev
     @data_channel.on('close')
     def on_close():
         print('\nData channel was closed')
-        logging.warning('Exiting program, data channel closed')
+        logging.warning('Exiting program, data channel was closed')
         sys.exit(1)
+
 
 async def message_loop(data_channel: RTCDataChannel) -> None:
     """Asynchronous function which handles receiving messages"""
@@ -93,8 +118,8 @@ async def message_loop(data_channel: RTCDataChannel) -> None:
     while True:
         message = await ainput('You: ')
         if message:
-            logging.debug(f'Message sended: {message}')
             data_channel.send(message)
+            logging.debug(f'Message sended: {message}')
 
 
 async def run_offer() -> None:
@@ -104,19 +129,21 @@ async def run_offer() -> None:
     # Create peer connection
     pc = RTCPeerConnection(configuration=ICE_CONFIG)
 
+    # Set behavior for connection state change
+    set_peer_connection_events(pc)
+
     # Create data channel and set its behavior on events
     dc = pc.createDataChannel('channel')
     set_data_channel_events(dc, data_channel_open_event)
 
-    # Set behavior for connection state change
-    @pc.on("connectionstatechange")
-    def on_connection_state_change():
-        print(f"Connection state changed: {pc.connectionState}")
 
     # Create and set offer
     offer = await pc.createOffer()
-    logging.info(offer)
     await pc.setLocalDescription(offer)
+
+    logging.info(
+        f"Offer created: {dict({'sdp': pc.localDescription.sdp,'type': pc.localDescription.type})}"
+    )
 
     # Print offer JSON for user to copy and share with peer
     print("\n=== Copy the following offer SDP and send it to your peer ===\n")
@@ -139,8 +166,9 @@ async def run_offer() -> None:
     await data_channel_open_event.wait()
 
     # Start infinite message loop (while connection is not closed)
+    asyncio.create_task(message_loop(dc))
     try:
-        await message_loop(dc)
+        await asyncio.Future()
     finally:
         await pc.close()
 
@@ -151,6 +179,9 @@ async def run_answer() -> None:
     # Create peer connection
     pc = RTCPeerConnection(configuration=ICE_CONFIG)
 
+    # Set behavior for connection state change
+    set_peer_connection_events(pc)
+
     # on_datacannel function will be executed when data channel received
     # from user who sent offer
     @pc.on('datachannel')
@@ -159,18 +190,9 @@ async def run_answer() -> None:
         logging.info("Data channel received")
         print("Data channel received")
         set_data_channel_events(data_channel)
-        # if data_channel.readyState == "open":
-            # logging.info("Data channel is open")
-            # print("Data channel is open")
 
         # Start a task for sending messages from the terminal.
         asyncio.create_task(message_loop(data_channel))
-
-    # Set behavior for connection state change
-    @pc.on("connectionstatechange")
-    def on_connection_state_change():
-        logging.info(f"Connection state changed: {pc.connectionState}")
-        print(f"Connection state changed: {pc.connectionState}")
 
 
     # Try to get remote offer from terminal until valid JSON is pasted
@@ -180,10 +202,13 @@ async def run_answer() -> None:
     # Set offer as remote desciption for peer connection
     await pc.setRemoteDescription(remote_description_offer)
 
-    # Create and set answer as local desciption for peer connection
+    # Create answer and set it as local desciption for peer connection
     answer = await pc.createAnswer()
-    logging.info(answer)
     await pc.setLocalDescription(answer)
+
+    logging.info(
+        f"Answer created: {dict({'sdp': pc.localDescription.sdp,'type': pc.localDescription.type})}"
+    )
 
     # Print answer JSON for user to copy and share with peer
     print("\n=== Copy the following answer SDP and send it to your peer ===\n")
