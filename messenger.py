@@ -1,9 +1,9 @@
-"""messenger.py"""
 import json
 import logging
-from datetime import datetime
 import sys
 import asyncio
+import websockets
+from datetime import datetime
 from aioconsole import ainput
 from aiortc import (RTCPeerConnection,
                     RTCSessionDescription,
@@ -11,106 +11,25 @@ from aiortc import (RTCPeerConnection,
                     RTCConfiguration,
                     RTCIceServer)
 
-
 LOGGING_FILE = 'logging.log'
 logging.basicConfig(level=logging.DEBUG, filename=LOGGING_FILE, filemode='w',
                     format="%(asctime)s - %(levelname)s - %(message)s")
 
-
-# Configure ICE with a STUN server.
 ICE_CONFIG = RTCConfiguration(
     iceServers=[RTCIceServer(urls=["stun:stun.l.google.com:19302"])]
 )
 
+SERVER_URL = "ws://localhost:8000"  # URL WebSocket сервера
 
-def read_sdp() -> RTCSessionDescription | None:
-    """
-    Reads SDP from terminal
+def set_data_channel_events(data_channel: RTCDataChannel, open_event: asyncio.Event = None):
+    """Обробник подій для data channel"""
 
-    return: RTCSessionDescription object if JSON is valid else None
-    """
-    lines = []
-    line = sys.stdin.readline().strip()
-
-    while line:
-        lines.append(line)
-        line = sys.stdin.readline().strip()
-
-    lines = ''.join(lines)
-
-    try:
-        sdp_json = json.loads(lines)
-    except json.JSONDecodeError:
-        return None
-
-    logging.info(f'SDP json received: {sdp_json}')
-
-    return RTCSessionDescription(sdp=sdp_json["sdp"], type=sdp_json["type"])
-
-
-def get_sdp() -> RTCSessionDescription:
-    """
-    Reads SDP JSONs from terminal until valid one is pasted
-
-    return: RTCSessionDescription object
-    """
-    while True:
-        sdp = read_sdp()
-        if sdp is not None:
-            break
-        print('Invalid JSON pasted, try again:')
-    return sdp
-
-
-# async def print_stats(peer_connection):
-#     stats_report = await peer_connection.getStats()
-#     print(stats_report)
-    # for report in stats_report.values():
-    #     print("Report type:", report.type)
-    #     print("Timestamp:", report.timestamp)
-    #     # Example: if it's an RTP sender report, it might include stats such as packetsSent.
-    #     if report.type == "outbound-rtp":
-    #         print("Packets sent:", report.packetsSent)
-    # print("Stats gathering complete.")
-
-
-def set_peer_connection_events(peer_connection: RTCPeerConnection):
-    """Set events behavior for data channel"""
-
-    @peer_connection.on("connectionstatechange")
-    def on_connection_state_change():
-        logging.info(f"Connection state changed: {peer_connection.connectionState}")
-        print(f"Connection state changed: {peer_connection.connectionState}")
-
-    @peer_connection.on("iceconnectionstatechange")
-    def on_ice_state_change():
-        logging.info(f"Ice connection state changed: {peer_connection.iceConnectionState}")
-        print(f"Ice connection state changed: {peer_connection.iceConnectionState}")
-
-    @peer_connection.on("icegatheringstatechange")
-    def on_ice_gathering_change():
-        logging.info(f"Ice gathering state changed: {peer_connection.iceGatheringState}")
-        print(f"Ice gathering state changed: {peer_connection.iceGatheringState}")
-
-    @peer_connection.on("signalingstatechange")
-    def on_signaling_state_change():
-        logging.info(f"Signaling state changed: {peer_connection.signalingState}")
-        print(f"Signaling state changed: {peer_connection.signalingState}")
-
-
-def set_data_channel_events(data_channel: RTCDataChannel, peer_connection: RTCPeerConnection, open_event: asyncio.Event=None) -> None:
-    """Set events behavior for data channel"""
-
-    @data_channel.on("error")
-    def on_error(error):
-        print("Data channel error:", error)
-        logging.error(f"Data channel error: {error}")
+    data_channel.on('error', lambda error: print("Data channel error:", error))
 
     @data_channel.on('message')
     def on_message(message):
         print(f'Peer ({datetime.now().strftime("%H:%M:%S")}): {message}')
         logging.debug(f'Message received: {message}')
-        # asyncio.create_task(print_stats(peer_connection))
 
     @data_channel.on('open')
     def on_open():
@@ -121,128 +40,97 @@ def set_data_channel_events(data_channel: RTCDataChannel, peer_connection: RTCPe
     @data_channel.on('close')
     def on_close():
         print('\nData channel was closed')
-        logging.warning('Exiting program, data channel was closed')
+        logging.warning('Exiting program, data channel closed')
         sys.exit(1)
 
-
-async def message_loop(data_channel: RTCDataChannel) -> None:
-    """Asynchronous function which handles receiving messages"""
+async def message_loop(data_channel: RTCDataChannel):
+    """Асинхронний цикл обміну повідомленнями"""
     print()
     while True:
         message = await ainput('You: ')
         if message:
+            logging.debug(f'Message sent: {message}')
             data_channel.send(message)
-            logging.debug(f'Message sended: {message}')
 
-
-async def run_offer() -> None:
-    """Function for user who runs code as offer"""
+async def run_offer():
+    """Функція для `offerer`"""
     data_channel_open_event = asyncio.Event()
-
-    # Create peer connection
     pc = RTCPeerConnection(configuration=ICE_CONFIG)
 
-    # Set behavior for connection state change
-    set_peer_connection_events(pc)
-
-    # Create data channel and set its behavior on events
     dc = pc.createDataChannel('channel')
-    set_data_channel_events(dc, pc, data_channel_open_event)
+    set_data_channel_events(dc, data_channel_open_event)
+
+    @pc.on("connectionstatechange")
+    def on_connection_state_change():
+        print(f"Connection state changed: {pc.connectionState}")
 
 
-    # Create and set offer
-    offer = await pc.createOffer()
-    await pc.setLocalDescription(offer)
+    async with websockets.connect(SERVER_URL) as websocket:
+        await websocket.send(json.dumps({"type": "register", "user_id": "offerer"}))
 
-    logging.info(
-        f"Offer created: {dict({'sdp': pc.localDescription.sdp,'type': pc.localDescription.type})}"
-    )
+        offer = await pc.createOffer()
+        logging.info(offer)
+        await pc.setLocalDescription(offer)
 
-    # Print offer JSON for user to copy and share with peer
-    print("\n=== Copy the following offer SDP and send it to your peer ===\n")
-    print(
-        json.dumps({
-            'sdp': pc.localDescription.sdp,
-            'type': pc.localDescription.type
-        })
-    )
-    print()
+        await websocket.send(json.dumps({"type": "offer", "sdp": offer.sdp, "user_id": "offerer"}))
 
-    # Try to get answer JSON from terminal until valid JSON is pasted
-    print("Paste remote answer SDP JSON and then press Enter:")
-    remote_description = get_sdp()
+        response = await websocket.recv()
+        data = json.loads(response)
 
-    # Set answer as remote description for peer connection
-    await pc.setRemoteDescription(remote_description)
+        if data["type"] == "answer":
+            answer = RTCSessionDescription(sdp=data["sdp"], type="answer")
+            await pc.setRemoteDescription(answer)
 
-    # Wait untill data channel is open
     await data_channel_open_event.wait()
-
-    # Start infinite message loop (while connection is not closed)
-    asyncio.create_task(message_loop(dc))
     try:
-        await asyncio.Future()
+        await message_loop(dc)
     finally:
         await pc.close()
 
-
-async def run_answer() -> None:
-    """Function for user who runs code as answer"""
-
-    # Create peer connection
+async def run_answer():
+    """Функція для `answerer`"""
     pc = RTCPeerConnection(configuration=ICE_CONFIG)
 
-    # Set behavior for connection state change
-    set_peer_connection_events(pc)
-
-    # on_datacannel function will be executed when data channel received
-    # from user who sent offer
     @pc.on('datachannel')
     def on_datachannel(data_channel):
-        """Set behavior when data channel received"""
         logging.info("Data channel received")
         print("Data channel received")
-        set_data_channel_events(data_channel, pc)
-
-        # Start a task for sending messages from the terminal.
+        set_data_channel_events(data_channel)
         asyncio.create_task(message_loop(data_channel))
 
+    @pc.on("connectionstatechange")
+    def on_connection_state_change():
+        logging.info(f"Connection state changed: {pc.connectionState}")
+        print(f"Connection state changed: {pc.connectionState}")
 
-    # Try to get remote offer from terminal until valid JSON is pasted
-    print("Paste remote offer SDP JSON and then press Enter:")
-    remote_description_offer = get_sdp()
+    async with websockets.connect(SERVER_URL) as websocket:
+        await websocket.send(json.dumps({"type": "register", "user_id": "answerer"}))
+        response = await websocket.recv()
+        # print('3')
+        data = json.loads(response)
+        # print(data)
 
-    # Set offer as remote desciption for peer connection
-    await pc.setRemoteDescription(remote_description_offer)
+        if data["type"] == "offer":
+            offer = RTCSessionDescription(sdp=data["sdp"], type="offer")
+            await pc.setRemoteDescription(offer)
+            # print('5')
 
-    # Create answer and set it as local desciption for peer connection
-    answer = await pc.createAnswer()
-    await pc.setLocalDescription(answer)
+            answer = await pc.createAnswer()
+            # print('6')
+            await pc.setLocalDescription(answer)
+            # print('7')
 
-    logging.info(
-        f"Answer created: {dict({'sdp': pc.localDescription.sdp,'type': pc.localDescription.type})}"
-    )
+            await websocket.send(json.dumps({"type": "answer", "sdp": answer.sdp, "user_id": "answerer"}))
+            # print('8')
 
-    # Print answer JSON for user to copy and share with peer
-    print("\n=== Copy the following answer SDP and send it to your peer ===\n")
-    print(
-        json.dumps({
-            'sdp': pc.localDescription.sdp,
-            'type': pc.localDescription.type
-        })
-    )
-    print()
-
-    # Wait indefinitely (or until the connection is closed)
     try:
         await asyncio.Future()
     finally:
         await pc.close()
-
 
 if __name__ == '__main__':
     if len(sys.argv) < 2 or sys.argv[1] not in ("offer", "answer"):
-        print("Usage: python p2p_chat.py offer|answer")
+        print("Usage: python messenger.py offer|answer")
         logging.warning('Exiting program, incorrect command')
         sys.exit(1)
 
