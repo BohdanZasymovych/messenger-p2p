@@ -23,6 +23,7 @@ async def websocket_handler(websocket):
                 print(f"Offer saved for user {user_id}: {offers[user_id]}")
                 if "answerer" in clients:
                     await clients["answerer"].send(json.dumps(offers[user_id]))
+                    del offers[user_id]
 
             elif data["type"] == "answer" and "offerer" in clients:
                 await clients["offerer"].send(json.dumps({"sdp": data['sdp'], "type": "answer"}))
@@ -31,6 +32,7 @@ async def websocket_handler(websocket):
                 if offers:
                     for _, offer_data in offers.items():
                         await websocket.send(json.dumps(offer_data))
+                    offers.clear()
 
     except json.JSONDecodeError:
         print("Error: Received invalid JSON")
@@ -38,6 +40,13 @@ async def websocket_handler(websocket):
         print(f"Connection closed for user: {user_id}")
         if user_id in clients:
             del clients[user_id]
+        if user_id in offers:
+            del offers[user_id]
+    finally:
+        if user_id:
+            clients.pop(user_id, None)
+            print(f"Cleaned up user: {user_id}")
+        await websocket.wait_closed()
 
 async def main():
     async with websockets.serve(websocket_handler, SERVER_IP, SERVER_PORT):
