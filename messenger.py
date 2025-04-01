@@ -62,6 +62,18 @@ def get_sdp() -> RTCSessionDescription:
     return sdp
 
 
+# async def print_stats(peer_connection):
+#     stats_report = await peer_connection.getStats()
+#     print(stats_report)
+    # for report in stats_report.values():
+    #     print("Report type:", report.type)
+    #     print("Timestamp:", report.timestamp)
+    #     # Example: if it's an RTP sender report, it might include stats such as packetsSent.
+    #     if report.type == "outbound-rtp":
+    #         print("Packets sent:", report.packetsSent)
+    # print("Stats gathering complete.")
+
+
 def set_peer_connection_events(peer_connection: RTCPeerConnection):
     """Set events behavior for data channel"""
 
@@ -86,7 +98,7 @@ def set_peer_connection_events(peer_connection: RTCPeerConnection):
         print(f"Signaling state changed: {peer_connection.signalingState}")
 
 
-def set_data_channel_events(data_channel: RTCDataChannel, open_event: asyncio.Event=None) -> None:
+def set_data_channel_events(data_channel: RTCDataChannel, peer_connection: RTCPeerConnection, open_event: asyncio.Event=None) -> None:
     """Set events behavior for data channel"""
 
     @data_channel.on("error")
@@ -98,6 +110,7 @@ def set_data_channel_events(data_channel: RTCDataChannel, open_event: asyncio.Ev
     def on_message(message):
         print(f'Peer ({datetime.now().strftime("%H:%M:%S")}): {message}')
         logging.debug(f'Message received: {message}')
+        # asyncio.create_task(print_stats(peer_connection))
 
     @data_channel.on('open')
     def on_open():
@@ -134,7 +147,7 @@ async def run_offer() -> None:
 
     # Create data channel and set its behavior on events
     dc = pc.createDataChannel('channel')
-    set_data_channel_events(dc, data_channel_open_event)
+    set_data_channel_events(dc, pc, data_channel_open_event)
 
 
     # Create and set offer
@@ -189,7 +202,7 @@ async def run_answer() -> None:
         """Set behavior when data channel received"""
         logging.info("Data channel received")
         print("Data channel received")
-        set_data_channel_events(data_channel)
+        set_data_channel_events(data_channel, pc)
 
         # Start a task for sending messages from the terminal.
         asyncio.create_task(message_loop(data_channel))
