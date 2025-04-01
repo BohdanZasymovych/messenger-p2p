@@ -6,6 +6,7 @@ SERVER_IP = "0.0.0.0"
 SERVER_PORT = 8000
 clients = {}
 offers = {}
+answers = {}
 
 async def websocket_handler(websocket):
     try:
@@ -24,6 +25,9 @@ async def websocket_handler(websocket):
                 if "answerer" in clients:
                     await clients["answerer"].send(json.dumps(offers[user_id]))
                     del offers[user_id]
+                elif user_id in answers:
+                    await websocket.send(json.dumps(answers[user_id]))
+                    del answers[user_id]
 
             elif data["type"] == "answer" and "offerer" in clients:
                 await clients["offerer"].send(json.dumps({"sdp": data['sdp'], "type": "answer"}))
@@ -42,6 +46,8 @@ async def websocket_handler(websocket):
             del clients[user_id]
         if user_id in offers:
             del offers[user_id]
+        if user_id in answers:
+            del answers[user_id]
     finally:
         if user_id:
             clients.pop(user_id, None)
