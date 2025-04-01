@@ -2,6 +2,8 @@ import asyncio
 import json
 import websockets
 
+SERVER_IP = "0.0.0.0"
+SERVER_PORT = 8000
 clients = {}
 offers = {}
 
@@ -23,7 +25,7 @@ async def websocket_handler(websocket):
                     await clients["answerer"].send(json.dumps(offers[user_id]))
 
             elif data["type"] == "answer" and "offerer" in clients:
-                await clients["offerer"].send(json.dumps(data))
+                await clients["offerer"].send(json.dumps({"sdp": data['sdp'], "type": "answer"}))
 
             elif data["type"] == "register" and user_id == "answerer":
                 if offers:
@@ -38,8 +40,8 @@ async def websocket_handler(websocket):
             del clients[user_id]
 
 async def main():
-    async with websockets.serve(websocket_handler, "localhost", 8000):
-        print("WebSocket сервер запущено на ws://localhost:8000/")
+    async with websockets.serve(websocket_handler, SERVER_IP, SERVER_PORT):
+        print(f"WebSocket server is running on ws:/{SERVER_IP}:{SERVER_PORT}")
         await asyncio.Future()
 
 asyncio.run(main())
