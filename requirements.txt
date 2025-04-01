@@ -128,3 +128,4 @@ wsproto==1.2.0
 yarl==1.18.3
 youtube-transcript-api==0.6.3
 zipp==3.21.0
+websockets==15.0.1
