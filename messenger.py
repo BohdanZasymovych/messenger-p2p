@@ -83,7 +83,7 @@ async def message_loop(data_channel: RTCDataChannel):
             data_channel.send(message)
 
 
-async def run_offer():
+async def run_offer(websocket, user_id, target_user_id):
     """Function for user who runs code as offerer"""
     data_channel_opening_event = asyncio.Event()
 
@@ -105,18 +105,17 @@ async def run_offer():
         "Offer created: %s", {'sdp': pc.localDescription.sdp,'type': pc.localDescription.type}
     )
 
-    async with websockets.connect(SERVER_URL) as websocket:
-        await websocket.send(json.dumps({"type": "register", "user_id": "offerer"}))
-        await websocket.send(json.dumps({"type": "offer", "sdp": pc.localDescription.sdp, "user_id": "offerer"}))
 
-        response = await websocket.recv()
-        # print(f'Response received: {response}')
-        data = json.loads(response)
+    await websocket.send(json.dumps({"type": "offer", "sdp": pc.localDescription.sdp, "user_id": user_id, 'target_user_id': target_user_id}))
 
-        if data["type"] == "answer":
-            answer = RTCSessionDescription(sdp=data["sdp"], type="answer")
-            await pc.setRemoteDescription(answer)
-            print("remote description set")
+    response = await websocket.recv()
+    # print(f'Response received: {response}')
+    data = json.loads(response)
+
+    if data["type"] == "answer" and data["user_id"] == target_user_id:
+        answer = RTCSessionDescription(sdp=data["sdp"], type="answer")
+        await pc.setRemoteDescription(answer)
+        print("remote description set")
 
     await data_channel_opening_event.wait()
     try:
@@ -125,7 +124,7 @@ async def run_offer():
         await pc.close()
 
 
-async def run_answer():
+async def run_answer(websocket, user_id, target_user_id):
     """Function for user who runs code as answer"""
     pc = RTCPeerConnection(configuration=ICE_CONFIG)
     set_peer_connection_events(pc)
@@ -137,21 +136,19 @@ async def run_answer():
         set_data_channel_events(data_channel)
         asyncio.create_task(message_loop(data_channel))
 
-    async with websockets.connect(SERVER_URL) as websocket:
-        await websocket.send(json.dumps({"type": "register", "user_id": "answerer"}))
 
-        response = await websocket.recv()
-        # print(f'Response received: {response}')
-        data = json.loads(response)
+    response = await websocket.recv()
+    print(f'Response received: {response}')
+    data = json.loads(response)
 
-        if data["type"] == "offer":
-            offer = RTCSessionDescription(sdp=data["sdp"], type="offer")
-            await pc.setRemoteDescription(offer)
+    if data["type"] == "offer" and data["user_id"] == target_user_id:
+        offer = RTCSessionDescription(sdp=data["sdp"], type="offer")
+        await pc.setRemoteDescription(offer)
 
-            answer = await pc.createAnswer()
-            await pc.setLocalDescription(answer)
+        answer = await pc.createAnswer()
+        await pc.setLocalDescription(answer)
 
-            await websocket.send(json.dumps({"type": "answer", "sdp": pc.localDescription.sdp, "user_id": "answerer"}))
+        await websocket.send(json.dumps({"type": "answer", "sdp": pc.localDescription.sdp, "user_id":user_id, 'target_user_id': target_user_id}))
 
     try:
         await asyncio.Future()
@@ -159,14 +156,27 @@ async def run_answer():
         await pc.close()
 
 
-if __name__ == '__main__':
-    if len(sys.argv) < 2 or sys.argv[1] not in ("offer", "answer"):
-        print("Usage: python messenger.py offer|answer")
-        logging.warning('Exiting program, incorrect command')
-        sys.exit(1)
+async def parse_roles(user_id, target_user_id):
+    async with websockets.connect(SERVER_URL) as websocket:
+        await websocket.send(json.dumps({"type": "register", "user_id": user_id, "target_user_id": target_user_id}))
 
-    role = sys.argv[1]
-    if role == "offer":
-        asyncio.run(run_offer())
-    else:
-        asyncio.run(run_answer())
+        response = await websocket.recv()
+        print(f'Response received: {response}')
+        data = json.loads(response)
+
+        if data["type"] == "request_answer":
+            await run_answer(websocket, user_id, target_user_id)
+        elif data["type"] == "request_offer":
+            await run_offer(websocket, user_id, target_user_id)
+
+
+def get_user_input():
+    user_id = input("Enter your user ID: ").strip()
+    target_user_id = input("Enter the ID of the user you want to connect to: ").strip()
+    return user_id, target_user_id
+
+
+
+if __name__ == '__main__':
+    user_id, target_user_id = get_user_input()
+    asyncio.run(parse_roles(user_id, target_user_id))
