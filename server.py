@@ -5,10 +5,10 @@ import websockets
 SERVER_IP = "0.0.0.0"
 SERVER_PORT = 8000
 clients = {}
-offers = {}
-answers = {}
-pending_offers = {}
-pending_answers = {}
+pending_data = {
+    "offer": {},
+    "answer": {}
+}
 
 
 async def websocket_handler(websocket):
@@ -18,13 +18,13 @@ async def websocket_handler(websocket):
             user_id = data.get("user_id")
             print(f"Received data: {data}")
             target_user_id = data.get("target_user_id")
+            msg_type = data.get("type")
 
             clients[user_id] = websocket
 
-            if user_id in pending_offers:
+            if user_id in pending_data["offer"]:
                 print(f"Sending pending offer to {user_id}")
-                await websocket.send(json.dumps(pending_offers[user_id]))
-                del pending_offers[user_id]
+                await websocket.send(json.dumps(pending_data['offer'].pop([user_id])))
 
             if data['type'] == 'register':
                 if target_user_id in clients:
@@ -33,25 +33,22 @@ async def websocket_handler(websocket):
                 else:
                     print(f"User {user_id} registered but {target_user_id} is not connected.")
 
-            elif data["type"] == "offer":
-                offers[user_id] = {"sdp": data["sdp"], "type": "offer", "user_id": user_id}
-                print(f"Offer saved for {user_id}")
+            elif msg_type in ("offer", "answer"):
+                payload = {
+                    "sdp": data["sdp"],
+                    "type": msg_type,
+                    "target_user_id": target_user_id,
+                    "user_id": user_id
+                }
+
+                pending_data[msg_type][user_id] = payload
 
                 if target_user_id in clients:
-                    await clients[target_user_id].send(json.dumps(offers[user_id]))
-                    print(f"Offer sent to {target_user_id}")
+                    await clients[target_user_id].send(json.dumps(payload))
+                    print(f"{msg_type.capitalize()} sent to {target_user_id}")
                 else:
-                    pending_offers[target_user_id] = offers[user_id]
-
-            elif data["type"] == "answer":
-                answers[user_id] = {"sdp": data["sdp"], "type": "answer", "user_id": user_id}
-                print(f"Answer saved for {user_id}")
-
-                if target_user_id in clients:
-                    await clients[target_user_id].send(json.dumps(answers[user_id]))
-                    print(f"Answer sent to {target_user_id}")
-                else:
-                    pending_answers[target_user_id] = answers[user_id]
+                    pending_data[msg_type][target_user_id] = payload
+                    print(f"{msg_type.capitalize()} stored for {target_user_id}")
 
     except json.JSONDecodeError:
         print("Error: Received invalid JSON")
@@ -61,13 +58,13 @@ async def websocket_handler(websocket):
         clear_data(user_id)
         await websocket.wait_closed()
 
-
 def clear_data(user_id):
     if user_id:
         clients.pop(user_id, None)
-        offers.pop(user_id, None)
-        answers.pop(user_id, None)
+        for store in pending_data.values():
+            store.pop(user_id, None)
         print(f"Cleaned up user: {user_id}")
+
 
 
 async def main():
