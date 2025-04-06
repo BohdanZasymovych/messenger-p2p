@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Interactive Map</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: sans-serif;
+    }
+
+    #map {
+      height: 100%;
+      width: 100%;
+    }
+
+    .search-container {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      background: white;
+      padding: 6px 10px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .search-container input {
+      border: none;
+      padding: 6px;
+      border-radius: 4px;
+      width: 250px;
+      outline: none;
+    }
+
+    .search-container button {
+      padding: 6px 10px;
+      border: none;
+      background: #007bff;
+      color: white;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .map-buttons {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .map-buttons button {
+      background: white;
+      border: none;
+      padding: 10px;
+      border-radius: 50%;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+      cursor: pointer;
+      width: 50px;
+      height: 50px;
+      font-size: 20px;
+    }
+
+    .map-buttons button:hover {
+      background-color: #eee;
+    }
+  </style>
+</head>
+<body>
+
+<div id="map"></div>
+<button onclick="goHome()" style="
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  padding: 10px 15px;
+  background: #0057b7;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  font-size: 16px;
+  cursor: pointer;
+  z-index: 9999;
+">🏠 Home</button>
+<div class="search-container">
+  <input type="text" id="search-input" placeholder="Find a place..." />
+  <button onclick="searchPlace()">Search</button>
+</div>
+
+<div class="map-buttons">
+  <button onclick="setRoute()" title="Set route">➡️</button>
+  <button onclick="clearAll()" title="Clear all">🧹</button>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.min.js"></script>
+
+<script>
+  const map = L.map('map').setView([52.370216, 4.883977], 13);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19
+  }).addTo(map);
+
+  let userLocation = null;
+  let placedMarker = null;
+  let routingControl = null;
+
+  // Get current location
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      userLocation = L.latLng(pos.coords.latitude, pos.coords.longitude);
+      map.setView(userLocation, 14);
+      L.circleMarker(userLocation, {
+        radius: 8,
+        color: 'blue',
+        fillColor: '#30f',
+        fillOpacity: 0.8
+      }).addTo(map).bindPopup("📍 You are here").openPopup();
+    },
+    err => {
+      alert("Geolocation permission denied.");
+    }
+  );
+
+  map.on("click", function (e) {
+    if (placedMarker) map.removeLayer(placedMarker);
+    placedMarker = L.marker(e.latlng).addTo(map).bindPopup("📍 Marker placed").openPopup();
+  });
+
+  function setRoute() {
+    if (!userLocation) return alert("User location not available.");
+    if (!placedMarker) return alert("Place a marker first!");
+
+    const destination = placedMarker.getLatLng();
+
+    if (routingControl) map.removeControl(routingControl);
+
+    routingControl = L.Routing.control({
+      waypoints: [userLocation, destination],
+      routeWhileDragging: false
+    }).addTo(map);
+  }
+
+  function clearAll() {
+    if (placedMarker) {
+      map.removeLayer(placedMarker);
+      placedMarker = null;
+    }
+    if (routingControl) {
+      map.removeControl(routingControl);
+      routingControl = null;
+    }
+  }
+// 
+  function searchPlace() {
+    const query = document.getElementById('search-input').value;
+    if (!query) return;
+
+    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.length === 0) return alert("Place not found.");
+
+        const { lat, lon } = data[0];
+        map.setView([parseFloat(lat), parseFloat(lon)], 14);
+      })
+      .catch(() => alert("Search failed."));
+  }
+  function goHome() {
+  window.location.href = "chat.html"; // or your chats page name
+}
+</script>
+
+</body>
+</html>
