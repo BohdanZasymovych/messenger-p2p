@@ -1,73 +1,144 @@
 import asyncio
 import json
 import websockets
+from objects import User, Message, Request
 
-SERVER_IP = "0.0.0.0"
+SERVER_IP = "localhost"
 SERVER_PORT = 8000
-clients = {}
-offers = {}
-answers = {}
-pending_offers = {}
-pending_answers = {}
+clients = {} # client_id: User
+pending_data = {
+    "offer": {}, # target_user_id: offer_dict
+    "answer": {}
+}
 
 
 async def websocket_handler(websocket):
+    print("New client connected.")
     try:
-        async for message in websocket:
-            data = json.loads(message)
-            user_id = data.get("user_id")
-            print(f"Received data: {data}")
-            target_user_id = data.get("target_user_id")
+        async for request in websocket:
+            data = Request.from_string(request)
+            print(f"Connection request: {data.json_string}\n")
+            request_type = data.type
+            user_id = data.content["user_id"]
 
-            clients[user_id] = websocket
+            if request_type == "register":
+                clients[user_id] = User(None, None, websocket)
 
-            if user_id in pending_offers:
-                print(f"Sending pending offer to {user_id}")
-                await websocket.send(json.dumps(pending_offers[user_id]))
-                del pending_offers[user_id]
+                # if user_id in pending_data["offer"]:
+                #     connection_request = Request(
+                #         request_type="connection_request",
+                #         content={}
+                #     )
+                #     await websocket.send(connection_request.json_string)
 
-            if data['type'] == 'register':
-                if target_user_id in clients:
-                    await websocket.send(json.dumps({"type": "request_answer"}))
-                    await clients[target_user_id].send(json.dumps({"type": "request_offer"}))
+                #     # role = Request(
+                #     #         request_type="assign_role",
+                #     #         content={"role": "answer"}
+                #     #     )
+                #     # await websocket.send(role.json_string)
+                #     # print(f"Assign role: {role.json_string}\n")
+                #     clients[user_id].role = "answer"
+
+                #     offer = pending_data["offer"][user_id]
+                #     target_user_id = pending_data["offer"][user_id]["offerer_id"]
+                #     del pending_data["offer"][user_id]
+                #     offer = Request(
+                #         request_type="offer",
+                #         content=offer
+                #     )
+                #     await websocket.send(offer.json_string)
+                #     print(f"Send offer: {offer.json_string}\n")
+
+                #     answer = await websocket.recv()
+                #     answer = Request.from_string(answer)
+                #     print(f"Get answer: {answer.json_string}\n")
+
+                #     answer = answer.content
+                #     answer = Request(
+                #         request_type="answer",
+                #         content=answer
+                #     )
+                #     await clients[target_user_id].websocket.send(answer.json_string)
+                #     print(f"Send answer: {answer.json_string}\n")
+
+                # else:
+                #     wait_request = Request(
+                #     request_type="wait_request",
+                #     content={}
+                #     )
+                #     await websocket.send(wait_request.json_string)
+
+            elif request_type == "connection":
+                print(f"\nPending data: {pending_data}\n")
+
+                if user_id in pending_data["offer"]:
+                    print(user_id in pending_data["offer"])
+                    role = Request(
+                            request_type="assign_role",
+                            content={"role": "answer"}
+                        )
+                    await websocket.send(role.json_string)
+                    print(f"Assign role: {role.json_string}\n")
+                    clients[user_id].role = "answer"
+
+                    offer = pending_data["offer"][user_id]
+                    target_user_id = offer["offerer_id"]
+                    del pending_data["offer"][user_id]
+
+                    offer = Request(
+                        request_type="offer",
+                        content=offer
+                    )
+                    await websocket.send(offer.json_string)
+                    print(f"Send offer: {offer.json_string}\n")
+
+                    answer = await websocket.recv()
+                    answer = Request.from_string(answer)
+                    print(f"Get answer: {answer.json_string}\n")
+
+                    answer = Request(
+                        request_type="answer",
+                        content=answer.content
+                    )
+                    await clients[target_user_id].websocket.send(answer.json_string)
+                    print(f"Send answer: {answer.json_string}\n")
+
+
                 else:
-                    print(f"User {user_id} registered but {target_user_id} is not connected.")
+                    role = Request(
+                            request_type="assign_role",
+                            content={"role": "offer"}
+                        )
+                    await websocket.send(role.json_string)
+                    print(f"Assign role: {role.json_string}\n")
+                    clients[user_id].role = "offer"
 
-            elif data["type"] == "offer":
-                offers[user_id] = {"sdp": data["sdp"], "type": "offer", "user_id": user_id}
-                print(f"Offer saved for {user_id}")
+                    offer = await websocket.recv()
+                    offer = Request.from_string(offer)
+                    print(f"Get offer: {offer.json_string}\n")
+                    pending_data["offer"][offer.content["target_user_id"]] = {
+                        "sdp": offer.content["sdp"],
+                        "type": "offer",
+                        "offerer_id": user_id}
 
-                if target_user_id in clients:
-                    await clients[target_user_id].send(json.dumps(offers[user_id]))
-                    print(f"Offer sent to {target_user_id}")
-                else:
-                    pending_offers[target_user_id] = offers[user_id]
-
-            elif data["type"] == "answer":
-                answers[user_id] = {"sdp": data["sdp"], "type": "answer", "user_id": user_id}
-                print(f"Answer saved for {user_id}")
-
-                if target_user_id in clients:
-                    await clients[target_user_id].send(json.dumps(answers[user_id]))
-                    print(f"Answer sent to {target_user_id}")
-                else:
-                    pending_answers[target_user_id] = answers[user_id]
+            else:
+                raise ValueError("Incorrect request type")
 
     except json.JSONDecodeError:
         print("Error: Received invalid JSON")
     except websockets.exceptions.ConnectionClosed:
         print(f"Connection closed for user: {user_id}")
     finally:
-        clear_data(user_id)
+        disconnect_user(user_id)
         await websocket.wait_closed()
 
 
-def clear_data(user_id):
+def disconnect_user(user_id):
     if user_id:
-        clients.pop(user_id, None)
-        offers.pop(user_id, None)
-        answers.pop(user_id, None)
-        print(f"Cleaned up user: {user_id}")
+        clients[user_id].disconnect()
+        for store in pending_data.values():
+            store.pop(user_id, None)
+        print(f"Disconnected user: {user_id}")
 
 
 async def main():
