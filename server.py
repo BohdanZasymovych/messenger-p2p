@@ -1,9 +1,10 @@
 import asyncio
 import json
 import websockets
-from objects import User, Message, Request
+from objects import User, Request
 
-SERVER_IP = "localhost"
+
+SERVER_IP = "0.0.0.0"
 SERVER_PORT = 8000
 clients = {} # client_id: User
 pending_data = {

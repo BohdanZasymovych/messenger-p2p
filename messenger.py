@@ -1,7 +1,7 @@
 """p2p messenger with signaling process via server"""
+from datetime import datetime
 import asyncio
 from aioconsole import ainput
-from datetime import datetime
 
 from objects import Message, Connection
 
@@ -17,7 +17,6 @@ async def main():
         user_id, target_user_id = get_user_input()
         message_queue = asyncio.Queue()
         connection = Connection(user_id, target_user_id)
-        # await connection.connect_to_server()
 
 
         async def on_disconnect(connection: Connection):
