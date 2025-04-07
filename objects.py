@@ -99,10 +99,15 @@ class Connection:
         self.peer_connection: RTCPeerConnection | None = None
         self.data_channel: RTCDataChannel | None = None
         self.websocket = None
-        self.p2p_connection_state = None
-        self.is_connected_websocket = False
+
         self.connection_type = None
+        self.is_connected_websocket = False
+        self.is_p2p_connected = asyncio.Event()
+        self.p2p_connection_state = "disconnected"
+
+        self.data_channel_opening_event = asyncio.Event()
         self.data_channel_closing_event = asyncio.Event()
+
         self.role = None
 
     async def p2p_disconnect(self):
@@ -114,7 +119,8 @@ class Connection:
 
         self.peer_connection = None
         self.data_channel = None
-        self.p2p_connection_state = None
+        self.p2p_connection_state = "disconnected"
+        self.is_p2p_connected.clear()
         self.connection_type = None
         self.role = None
 
@@ -166,11 +172,11 @@ class Connection:
         @data_channel.on('close')
         def on_close():
             print('\nData channel was closed')
-            self.data_channel_closing_event.set()
+            self.is_p2p_connected.clear()
+            self.p2p_connection_state = "disconnected"
 
     async def __connect_offer(self) -> bool:
         """Function to connect as offerer"""
-        data_channel_opening_event = asyncio.Event()
 
         # Create peer connection
         pc = RTCPeerConnection(configuration=ICE_CONFIG)
@@ -186,7 +192,7 @@ class Connection:
         @dc.on('open')
         def on_open():
             print('Data channel is open')
-            data_channel_opening_event.set()
+            self.is_p2p_connected.set()
 
         # Create and set offer
         offer = await pc.createOffer()
@@ -219,8 +225,9 @@ class Connection:
             raise ValueError("Incorrect response")
 
         try:
-            await asyncio.wait_for(data_channel_opening_event.wait(), 10)
+            await asyncio.wait_for(self.is_p2p_connected.wait(), 10)
             self.data_channel = dc
+            self.p2p_connection_state = "connected"
         except asyncio.TimeoutError:
             return False
 
@@ -228,8 +235,6 @@ class Connection:
 
     async def __connect_answer(self) -> bool:
         """Function to connect as answer"""
-        print("Connect answer")
-        data_channel_opening_event = asyncio.Event()
 
         pc = RTCPeerConnection(configuration=ICE_CONFIG)
         self.peer_connection = pc
@@ -246,10 +251,10 @@ class Connection:
             @data_channel.on('open')
             def on_open():
                 print('Data channel is open')
-                data_channel_opening_event.set()
+                self.is_p2p_connected.set()
 
             if data_channel.readyState == "open":
-                data_channel_opening_event.set()
+                self.is_p2p_connected.set()
 
             nonlocal dc
             dc = data_channel
@@ -283,8 +288,9 @@ class Connection:
             raise ValueError("Incorrect response")
 
         try:
-            await asyncio.wait_for(data_channel_opening_event.wait(), 10)
+            await asyncio.wait_for(self.is_p2p_connected.wait(), 10)
             self.data_channel = dc
+            self.p2p_connection_state = "connected"
         except asyncio.TimeoutError:
             return False
 
@@ -328,19 +334,20 @@ class Connection:
         print(f"Register request sended: {register_request.json_string}")
         self.is_connected_websocket = True
 
-        # register_response = await websocket.recv()
-        # register_response = Request.from_string(register_response)
-        # print(f"Register response received: {register_response.json_string}")
+        register_response = await websocket.recv()
+        register_response = Request.from_string(register_response)
+        print(f"Register response received: {register_response.json_string}")
 
-        # if register_response.type in ("connection_request", "wait_request"):
-        #     return register_response
-        # raise ValueError("Incorrect response")
+        match register_response.type:
+            case "connection_request":
+                await self.connect()
+            case "wait_request":
+                pass
+            case _:
+                raise ValueError("Incorrect response")
 
-
-    async def connect(self) -> bool:
-        if not self.is_connected_websocket:
-            await self.connect_to_server()
-
+    async def connect_to_peer(self) -> bool:
+        self.p2p_connection_state = "connecting"
         self.role = await self.__parse_role(self.target_user_id)
 
         is_p2p_connected = await self.__establish_p2p_connection(self.role)
@@ -349,8 +356,39 @@ class Connection:
             self.connection_type = "p2p_connection"
             self.p2p_connection_state = "connected"
             return True
-
         return False
+
+
+    async def connect(self) -> bool:
+        if self.is_p2p_connected.is_set():
+            return
+
+        if not self.is_connected_websocket:
+            await self.connect_to_server()
+
+        if self.p2p_connection_state == "connecting":
+            try:
+                asyncio.wait_for(self.is_p2p_connected.wait(), 12)
+            except asyncio.TimeoutError:
+                raise Exception("Connection failed.")
+                # return await self.connect_to_peer()
+        else:
+            await self.connect_to_peer()
+
+
+        # self.role = await self.__parse_role(self.target_user_id)
+
+        # is_p2p_connected = await self.__establish_p2p_connection(self.role)
+
+        # if is_p2p_connected:
+        #     self.connection_type = "p2p_connection"
+        #     self.p2p_connection_state = "connected"
+        #     return True
+        # self.p2p_connection_state = "disconnected"
+        # return False
+
+
+
 
 
 # class Chat:

@@ -1,4 +1,5 @@
 """p2p messenger with signaling process via server"""
+
 from datetime import datetime
 import asyncio
 from aioconsole import ainput
@@ -17,12 +18,12 @@ async def main():
         user_id, target_user_id = get_user_input()
         message_queue = asyncio.Queue()
         connection = Connection(user_id, target_user_id)
+        await connection.connect_to_server()
 
 
-        async def on_disconnect(connection: Connection):
+        async def on_disconnect(connection: Connection) -> None:
             await connection.data_channel_closing_event.wait()
             await connection.p2p_disconnect()
-
 
         async def message_loop():
             """Asynchronous function which handles receiving messages"""
@@ -31,21 +32,13 @@ async def main():
                 message = await ainput('You: ')
                 if message:
                     message_queue.put_nowait(Message(
-                                                message_type="message",
-                                                content=message,
-                                                sending_time=datetime.now().strftime('%H:%M:%S')))
-
+                                            message_type="message",
+                                            content=message,
+                                            sending_time=datetime.now().strftime('%H:%M:%S')))
 
         async def send_message(message: Message, connection: Connection):
-            if connection.p2p_connection_state == "connected":
-                connection.data_channel.send(message.json_string)
-            else:
-                is_connected = await connection.connect()
-                if is_connected:
-                    connection.data_channel.send(message.json_string)
-                else:
-                    raise Exception("Connection failed")
-
+            await connection.connect()
+            connection.data_channel.send(message.json_string)
 
         async def send_message_loop(connection):
             while True:

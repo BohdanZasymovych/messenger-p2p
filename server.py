@@ -13,32 +13,90 @@ pending_data = {
 }
 
 
+async def connect_offer(websocket, user_id):
+    role = Request(
+            request_type="assign_role",
+            content={"role": "offer"}
+        )
+    await websocket.send(role.json_string)
+    print(f"Assign role: {role.json_string}\n")
+    clients[user_id].role = "offer"
+
+    offer = await websocket.recv()
+    offer = Request.from_string(offer)
+    print(f"Get offer: {offer.json_string}\n")
+    pending_data["offer"][offer.content["target_user_id"]] = {
+        "sdp": offer.content["sdp"],
+        "type": "offer",
+        "offerer_id": user_id}
+
+
+async def connect_answer(websocket, user_id):
+    role = Request(
+            request_type="assign_role",
+            content={"role": "answer"}
+        )
+    await websocket.send(role.json_string)
+    print(f"Assign role: {role.json_string}\n")
+    clients[user_id].role = "answer"
+
+    offer = pending_data["offer"][user_id]
+    target_user_id = offer["offerer_id"]
+    del pending_data["offer"][user_id]
+
+    offer = Request(
+        request_type="offer",
+        content=offer
+    )
+    await websocket.send(offer.json_string)
+    print(f"Send offer: {offer.json_string}\n")
+
+    answer = await websocket.recv()
+    answer = Request.from_string(answer)
+    print(f"Get answer: {answer.json_string}\n")
+
+    answer = Request(
+        request_type="answer",
+        content=answer.content
+    )
+    await clients[target_user_id].websocket.send(answer.json_string)
+    print(f"Send answer: {answer.json_string}\n")
+
+
 async def websocket_handler(websocket):
     print("New client connected.")
     try:
         async for request in websocket:
             data = Request.from_string(request)
-            print(f"Connection request: {data.json_string}\n")
+            print(f"Request: {data.json_string}\n")
             request_type = data.type
             user_id = data.content["user_id"]
 
             if request_type == "register":
                 clients[user_id] = User(None, None, websocket)
 
-                # if user_id in pending_data["offer"]:
-                #     connection_request = Request(
-                #         request_type="connection_request",
-                #         content={}
-                #     )
-                #     await websocket.send(connection_request.json_string)
+                if user_id in pending_data["offer"]:
+                    connection_request = Request(
+                        request_type="connection_request",
+                        content={}
+                    )
+                    await websocket.send(connection_request.json_string)
 
-                #     # role = Request(
-                #     #         request_type="assign_role",
-                #     #         content={"role": "answer"}
-                #     #     )
-                #     # await websocket.send(role.json_string)
-                #     # print(f"Assign role: {role.json_string}\n")
-                #     clients[user_id].role = "answer"
+                    clients[user_id].role = "answer"
+                    await connect_answer(websocket, user_id)
+                else:
+                    wait_request = Request(
+                    request_type="wait_request",
+                    content={}
+                    )
+                    await websocket.send(wait_request.json_string)
+
+                    # role = Request(
+                    #         request_type="assign_role",
+                    #         content={"role": "answer"}
+                    #     )
+                    # await websocket.send(role.json_string)
+                    # print(f"Assign role: {role.json_string}\n")
 
                 #     offer = pending_data["offer"][user_id]
                 #     target_user_id = pending_data["offer"][user_id]["offerer_id"]
@@ -62,65 +120,61 @@ async def websocket_handler(websocket):
                 #     await clients[target_user_id].websocket.send(answer.json_string)
                 #     print(f"Send answer: {answer.json_string}\n")
 
-                # else:
-                #     wait_request = Request(
-                #     request_type="wait_request",
-                #     content={}
-                #     )
-                #     await websocket.send(wait_request.json_string)
-
+###########################
             elif request_type == "connection":
                 print(f"\nPending data: {pending_data}\n")
 
                 if user_id in pending_data["offer"]:
-                    print(user_id in pending_data["offer"])
-                    role = Request(
-                            request_type="assign_role",
-                            content={"role": "answer"}
-                        )
-                    await websocket.send(role.json_string)
-                    print(f"Assign role: {role.json_string}\n")
-                    clients[user_id].role = "answer"
+                    await connect_answer(websocket, user_id)
+                    # print(user_id in pending_data["offer"])
+                    # role = Request(
+                    #         request_type="assign_role",
+                    #         content={"role": "answer"}
+                    #     )
+                    # await websocket.send(role.json_string)
+                    # print(f"Assign role: {role.json_string}\n")
+                    # clients[user_id].role = "answer"
 
-                    offer = pending_data["offer"][user_id]
-                    target_user_id = offer["offerer_id"]
-                    del pending_data["offer"][user_id]
+                    # offer = pending_data["offer"][user_id]
+                    # target_user_id = offer["offerer_id"]
+                    # del pending_data["offer"][user_id]
 
-                    offer = Request(
-                        request_type="offer",
-                        content=offer
-                    )
-                    await websocket.send(offer.json_string)
-                    print(f"Send offer: {offer.json_string}\n")
+                    # offer = Request(
+                    #     request_type="offer",
+                    #     content=offer
+                    # )
+                    # await websocket.send(offer.json_string)
+                    # print(f"Send offer: {offer.json_string}\n")
 
-                    answer = await websocket.recv()
-                    answer = Request.from_string(answer)
-                    print(f"Get answer: {answer.json_string}\n")
+                    # answer = await websocket.recv()
+                    # answer = Request.from_string(answer)
+                    # print(f"Get answer: {answer.json_string}\n")
 
-                    answer = Request(
-                        request_type="answer",
-                        content=answer.content
-                    )
-                    await clients[target_user_id].websocket.send(answer.json_string)
-                    print(f"Send answer: {answer.json_string}\n")
+                    # answer = Request(
+                    #     request_type="answer",
+                    #     content=answer.content
+                    # )
+                    # await clients[target_user_id].websocket.send(answer.json_string)
+                    # print(f"Send answer: {answer.json_string}\n")
 
 
                 else:
-                    role = Request(
-                            request_type="assign_role",
-                            content={"role": "offer"}
-                        )
-                    await websocket.send(role.json_string)
-                    print(f"Assign role: {role.json_string}\n")
-                    clients[user_id].role = "offer"
+                    await connect_offer(websocket, user_id)
+                    # role = Request(
+                    #         request_type="assign_role",
+                    #         content={"role": "offer"}
+                    #     )
+                    # await websocket.send(role.json_string)
+                    # print(f"Assign role: {role.json_string}\n")
+                    # clients[user_id].role = "offer"
 
-                    offer = await websocket.recv()
-                    offer = Request.from_string(offer)
-                    print(f"Get offer: {offer.json_string}\n")
-                    pending_data["offer"][offer.content["target_user_id"]] = {
-                        "sdp": offer.content["sdp"],
-                        "type": "offer",
-                        "offerer_id": user_id}
+                    # offer = await websocket.recv()
+                    # offer = Request.from_string(offer)
+                    # print(f"Get offer: {offer.json_string}\n")
+                    # pending_data["offer"][offer.content["target_user_id"]] = {
+                    #     "sdp": offer.content["sdp"],
+                    #     "type": "offer",
+                    #     "offerer_id": user_id}
 
             else:
                 raise ValueError("Incorrect request type")
