@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Security App</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: Arial, sans-serif;
+      background: linear-gradient(to bottom, black, #242D6F);
+      color: white;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .navbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 40px;
+      background-color: rgba(0, 0, 0, 0.7);
+      position: fixed;
+      width: 100%;
+      top: 0;
+      z-index: 1000;
+    }
+    .navbar img {
+      height: 40px;
+      border-radius: 50%;
+    }
+    .nav-links {
+      display: flex;
+      gap: 30px;
+    }
+    .nav-links a {
+      color: white;
+      text-decoration: none;
+      font-weight: bold;
+      transition: color 0.3s;
+    }
+    .nav-links a:hover {
+      color: #1E90FF;
+    }
+    .hero {
+      padding-top: 120px;
+      text-align: left;
+      padding-bottom: 80px;
+      padding-left: 60px;
+      display: flex;
+      align-items: center;
+      gap: 40px;
+    }
+    .hero-content {
+      max-width: 500px;
+    }
+    .hero h1 {
+      font-size: 48px;
+      font-weight: bold;
+      margin-bottom: 20px;
+    }
+    .hero p {
+      font-size: 20px;
+      margin-bottom: 30px;
+    }
+    .hero .login-button {
+      padding: 12px 30px;
+      background-color: #1E90FF;
+      border: none;
+      border-radius: 30px;
+      color: white;
+      font-size: 16px;
+      font-weight: bold;
+      text-decoration: none;
+      transition: background-color 0.3s;
+    }
+    .hero .login-button:hover {
+      background-color: #0066cc;
+    }
+    .hero-image {
+      max-width: 500px;
+    }
+    .hero-image img {
+      width: 100%;
+      border-radius: 20px;
+    }
+    .features {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 20px;
+      padding: 60px 20px;
+    }
+    .feature-box {
+      background: rgba(255, 255, 255, 0.2);
+      padding: 20px;
+      border-radius: 10px;
+      width: 300px;
+      text-align: center;
+    }
+    .feature-box h3 {
+      margin-bottom: 10px;
+      font-size: 18px;
+      color: #ffffff;
+    }
+    .feature-box p {
+      font-size: 14px;
+      color: #dddddd;
+    }
+    footer {
+      background-color: rgba(0, 0, 0, 0.7);
+      padding: 20px;
+      text-align: center;
+      font-size: 14px;
+      margin-top: auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="navbar">
+    <img src="photo_2024-12-02_10-34-48.jpg" alt="Logo">
+    <div class="nav-links">
+      <a href="#">Download</a>
+      <a href="#">Our Team</a>
+      <a href="mini2.html">Sign up</a>
+      <a href="mini1.html">Log in</a>
+    </div>
+  </div>
+
+  <div class="hero">
+    <div class="hero-content">
+      <h1>Security - our priority</h1>
+      <p>Open-source, decentralized, and end-to-end encrypted platform for communication you can trust.</p>
+      <a href="mini1.html" class="login-button">Log in</a>
+    </div>
+    <div class="hero-image">
+      <img src="C:\Users\yarem\Downloads\Telegram Desktop\photo_2025-04-07_00-27-41.jpg" alt="Hero Image">
+    </div>
+  </div>
+
+  <div class="features">
+    <div class="feature-box">
+      <h3>Peer-to-peer connection</h3>
+      <p>Decentralized communication with no central server</p>
+    </div>
+    <div class="feature-box">
+      <h3>End-to-end encryption</h3>
+      <p>Your messages stay private with strong encryption</p>
+    </div>
+    <div class="feature-box">
+      <h3>Map</h3>
+      <p>Real-time location sharing for seamless and secure navigation</p>
+    </div>
+  </div>
+
+  <footer>
+    &copy; 2025 Security App. All rights reserved.
+  </footer>
+</body>
+</html>
