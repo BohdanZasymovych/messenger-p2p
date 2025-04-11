@@ -12,32 +12,36 @@ ICE_CONFIG = RTCConfiguration(
     iceServers=[RTCIceServer(urls=["stun:stun.l.google.com:19302"])]
 )
 
-SERVER_URL = "ws://localhost:8000"
+SERVER_URL = "ws://0.0.0.0:8000"
 
 
 class User:
-    def __init__(self, role: str, connection_type: str, websocket):
-        self.connected = True
-        # self.role = role
-        self.connection_type = connection_type
+    def __init__(self, websocket):
+        self.is_online = True
+        self.role = None
+        self.is_pended = False
+        self.pending_user_id = None
+        self.pended_user_id = None
+        self.connection_type = None
         self.websocket = websocket
-        # self.role_change = False
         self.message_queue = asyncio.Queue()
 
-    def add_message(self, message: str):
+    def add_message(self, message: 'Message'):
         self.message_queue.put_nowait(message.json_string)
 
     def disconnect(self):
-        self.connected = False
-        # self.role = None
+        self.is_online = False
+        self.role = None
+        self.is_pended = False
+        self.pending_user_id = None
+        self.pended_user_id = None
         self.connection_type = None
         self.websocket = None
-        # self.role_change = False
 
 
 class Message:
     """Class to represent message exchanged between users"""
-    def __init__(self, message_type: str, content: str, sending_time: str, user_id: str=None, target_user_id: str=None):
+    def __init__(self, message_type: str, content: str, sending_time: str):
         self.type = message_type
         self.content = content
         self.sending_time = sending_time
@@ -105,6 +109,7 @@ class Connection:
         self.is_p2p_connected = asyncio.Event()
         self.p2p_connection_state = "disconnected"
 
+        self.local_connection_initiated = asyncio.Event()
         self.data_channel_opening_event = asyncio.Event()
         self.data_channel_closing_event = asyncio.Event()
 
@@ -121,6 +126,9 @@ class Connection:
         self.data_channel = None
         self.p2p_connection_state = "disconnected"
         self.is_p2p_connected.clear()
+        self.local_connection_initiated.clear()
+        self.data_channel_opening_event.clear()
+        self.data_channel_closing_event.clear()
         self.connection_type = None
         self.role = None
 
@@ -173,6 +181,7 @@ class Connection:
         def on_close():
             print('\nData channel was closed')
             self.is_p2p_connected.clear()
+            self.local_connection_initiated.clear()
             self.p2p_connection_state = "disconnected"
 
     async def __connect_offer(self) -> bool:
@@ -200,10 +209,9 @@ class Connection:
 
         offer_request = Request(
             request_type="share_offer",
-            user_id=self.user_id,
             content={"type": pc.localDescription.type,
-                    "sdp": pc.localDescription.sdp,
-                    "target_user_id": self.target_user_id})
+                    "sdp": pc.localDescription.sdp}
+        )
 
         await self.websocket.send(offer_request.json_string)
         print(f"Offer sent: {offer_request.json_string}")
@@ -212,12 +220,12 @@ class Connection:
         data = Request.from_string(response)
         print(f"Received answer: {data.json_string}")
 
-        if data.type != "answer":
+        if data.type != "share_answer":
             raise ValueError("Incorrect response")
 
         answer = data.content
 
-        if answer["type"] == "answer" and answer["answerer_id"] == self.target_user_id:
+        if answer["type"] == "answer":
             answer = RTCSessionDescription(sdp=answer["sdp"], type="answer")
             await pc.setRemoteDescription(answer)
             print("Remote description was set")
@@ -263,12 +271,12 @@ class Connection:
         data = Request.from_string(response)
         print(f"Received offer: {data.json_string}")
 
-        if data.type != "offer":
+        if data.type != "share_offer":
             raise ValueError("Incorrect response")
 
         offer = data.content
 
-        if offer["type"] == "offer" and offer["offerer_id"] == self.target_user_id:
+        if offer["type"] == "offer":
             offer = RTCSessionDescription(sdp=offer["sdp"], type="offer")
             await pc.setRemoteDescription(offer)
 
@@ -276,16 +284,15 @@ class Connection:
             await pc.setLocalDescription(answer)
 
             answer = Request(
-                request_type="answer",
+                request_type="share_answer",
                 content={"sdp": pc.localDescription.sdp,
-                        "type": "answer",
-                        "answerer_id": self.user_id}
+                        "type": pc.localDescription.type}
             )
 
             await self.websocket.send(answer.json_string)
             print(f"Answer sent: {answer.json_string}")
         else:
-            raise ValueError("Incorrect response")
+            raise ValueError("Incorrect response type.")
 
         try:
             await asyncio.wait_for(self.is_p2p_connected.wait(), 10)
@@ -296,21 +303,22 @@ class Connection:
 
         return True
 
-    async def __parse_role(self, target_user_id: str):
-        connection_request = Request(
-                request_type="connection",
-                user_id=self.user_id,
-                content={"user_id": self.user_id, "target_user_id": target_user_id})
+    # async def __parse_role(self, target_user_id: str):
+    #     connection_request = Request(
+    #             request_type="connection",
+    #             user_id=self.user_id,
+    #             content={"user_id": self.user_id, "target_user_id": target_user_id})
 
-        await self.websocket.send(connection_request.json_string)
-        print(f"Connection request sended: {connection_request.json_string}")
+    #     await self.websocket.send(connection_request.json_string)
+    #     print(f"Connection request sended: {connection_request.json_string}")
 
-        response = await self.websocket.recv()
-        role = Request.from_string(response)
-        print(f"Role received: {role.json_string}")
-        return role.content["role"]
+    #     response = await self.websocket.recv()
+    #     role = Request.from_string(response)
+    #     print(f"Role received: {role.json_string}")
+    #     return role.content["role"]
 
     async def __establish_p2p_connection(self, role: str) -> RTCDataChannel | None:
+        print("Establish p2p connection")
         match role:
             case "offer":
                 is_p2p_connected = await self.__connect_offer()
@@ -322,11 +330,12 @@ class Connection:
         return is_p2p_connected
 
     async def connect_to_server(self):
+
         websocket = await websockets.connect(SERVER_URL)
         self.websocket = websocket
 
         register_request = Request(
-            request_type="register",
+            request_type="register_request",
             content={"user_id": self.user_id}
         )
 
@@ -340,15 +349,65 @@ class Connection:
 
         match register_response.type:
             case "connection_request":
-                await self.connect()
+                self.role = register_response.content["role"]
+                await self.__establish_p2p_connection(self.role)
+
             case "wait_request":
-                pass
+                # connection_init_task = asyncio.create_task(wait_for_connection_init())
+                
+                receive_request_task = asyncio.create_task(self.websocket.recv())
+                local_connection_task = asyncio.create_task(self.local_connection_initiated.wait())
+                await asyncio.wait(
+                    [
+                        receive_request_task,
+                        local_connection_task
+                    ],
+                    return_when=asyncio.FIRST_COMPLETED
+                )
+
+                if not receive_request_task.done():
+                    receive_request_task.cancel()
+
+                try:
+                    connection_request = await receive_request_task
+                except asyncio.CancelledError:
+                    return
+
+                # if connection_request.type == "client_not_registered_error":
+                #     raise ValueError("Target user is not registered")
+
+                connection_request = Request.from_string(connection_request)
+                self.role = connection_request.content["role"]
+                answer_connection_request = Request(
+                    request_type="connect_to",
+                    content={"role": "answer", "user_id": self.user_id, "target_user_id": self.target_user_id}
+                )
+                await self.websocket.send(answer_connection_request.json_string)
+                print(f"Connect to request sent: {answer_connection_request.json_string}")
+                await self.__establish_p2p_connection(self.role)
+
             case _:
-                raise ValueError("Incorrect response")
+                raise ValueError("Incorrect register response")
 
     async def connect_to_peer(self) -> bool:
         self.p2p_connection_state = "connecting"
-        self.role = await self.__parse_role(self.target_user_id)
+
+        connection_request = Request(
+            request_type="connection_request",
+            content={"user_id": self.user_id, "target_user_id": self.target_user_id}
+        )
+        await self.websocket.send(connection_request.json_string)
+        print(f"Connection request sent: {connection_request.json_string}")
+
+        connection_response = await self.websocket.recv()
+        connection_response = Request.from_string(connection_response)
+        print(f"Connection response sent: {connection_response.json_string}")
+
+
+        if connection_response.type == "client_not_registered_error":
+            raise ValueError("Target user is not registered")
+
+        self.role = connection_response.content["role"]
 
         is_p2p_connected = await self.__establish_p2p_connection(self.role)
 
@@ -360,20 +419,29 @@ class Connection:
 
 
     async def connect(self) -> bool:
+        self.local_connection_initiated.set()
+
+
         if self.is_p2p_connected.is_set():
             return
 
         if not self.is_connected_websocket:
             await self.connect_to_server()
 
+        await asyncio.sleep(0.1)
+
         if self.p2p_connection_state == "connecting":
             try:
-                asyncio.wait_for(self.is_p2p_connected.wait(), 12)
+                asyncio.wait_for(self.is_p2p_connected.wait(), 10)
             except asyncio.TimeoutError:
                 raise Exception("Connection failed.")
-                # return await self.connect_to_peer()
-        else:
-            await self.connect_to_peer()
+
+        if self.p2p_connection_state == "disconnected":
+            connection_result = await self.connect_to_peer()
+            print(connection_result)
+            return
+
+        raise ValueError("Invalid p2p connection state")
 
 
         # self.role = await self.__parse_role(self.target_user_id)
