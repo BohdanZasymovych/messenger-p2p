@@ -5,12 +5,12 @@ Install requirements
 pip install -r requirements.txt
 ```
 
-Run for offer
+Run server
 ```bash
-python3 messenger.py offer
+python3 server.py
 ```
 
-Run for answer
+Run client
 ```bash
-python3 messenger.py answer
+python3 messenger.py
 ```
