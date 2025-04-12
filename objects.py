@@ -1,8 +1,8 @@
+"""objects for messenger.py and server.py"""
 import json
 import asyncio
 from datetime import datetime
 from aioconsole import ainput
-
 from aiortc import (RTCPeerConnection,
                     RTCSessionDescription,
                     RTCDataChannel,
@@ -34,7 +34,7 @@ class User:
     """Class that represents user on the server side"""
     def __init__(self, websocket=None):
         self.is_online = True # Indicates if user is connected to the server
-        self.role = None 
+        self.role = None
         self.is_pended = False # Indicates if someone is waiting for user
         self.pending_user_id = None # User waiting for you
         self.pended_user_id = None # User you are waiting
@@ -127,15 +127,28 @@ class Message:
             target_user_id=data['target_user_id']
         )
 
+    @property
+    def unique_id(self):
+        """Returns unique id of the message based on hash"""
+        return hash(self)
+
     def __str__(self):
         return f"User {self.user_id} ({self.sending_time}): {self.content}"
+
+    def __hash__(self):
+        return hash(
+                (self.type,
+                self.sending_time.json_string,
+                self.content, self.user_id,
+                self.target_user_id)
+                )
 
 
 class Request:
     """Class to represent request to the server or from it"""
     def __init__(self, request_type: str, user_id: str=None, content: str=None):
         self.type = request_type
-        self.user_id = user_id # id of user who sended request if server sended should be None 
+        self.user_id = user_id # id of user who sended request if server sended should be None
         self.content = content if content is not None else {}
 
     @property
