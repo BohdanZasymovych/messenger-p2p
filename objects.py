@@ -1,5 +1,8 @@
 import json
 import asyncio
+from aioconsole import ainput
+from datetime import datetime
+
 from aiortc import (RTCPeerConnection,
                     RTCSessionDescription,
                     RTCDataChannel,
@@ -15,13 +18,24 @@ ICE_CONFIG = RTCConfiguration(
 SERVER_URL = "ws://0.0.0.0:8000"
 
 
+class IncorrectRequestTypeError(Exception):
+    """Exception which is raised when request with incorrect type is received"""
+
+
+class ConnectionTimeoutError(Exception):
+    """Exception which is raised when connection is not established within certain amount of time"""
+
+class UserNotRegisteredError(Exception):
+    """Exception which is raised when target user is not registered on server"""
+
+
 class User:
-    def __init__(self, websocket):
+    def __init__(self, websocket=None):
         self.is_online = True
         self.role = None
-        self.is_pended = False
-        self.pending_user_id = None
-        self.pended_user_id = None
+        self.is_pended = False # Indicates if someone is waiting for user
+        self.pending_user_id = None # User waiting for you
+        self.pended_user_id = None # User you are waiting
         self.connection_type = None
         self.websocket = websocket
         self.message_queue = asyncio.Queue()
@@ -39,14 +53,52 @@ class User:
         self.websocket = None
 
 
+class Time:
+    """Class to represent time"""
+    def __init__(self, empty: bool=False):
+        """
+        Initializes time object with current time if empty is False,
+        empty time object otherwise
+        """
+        if empty:
+            self.date = None
+            self.time = None
+        else:
+            cur_time =  datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
+            self.date = cur_time.split()[0]
+            self.time = cur_time.split()[1]
+
+    def __str__(self):
+        """Returns time to seconds"""
+        return self.time[:8]
+
+    @property
+    def json_string(self):
+        """Returns json string representing time object"""
+        return json.dumps(
+            {"date": self.date, "time": self.time}
+        )
+
+    @classmethod
+    def from_string(cls, json_string: str) -> 'Time':
+        """Creates time object from json string"""
+        time_obj = Time(empty=True)
+        time_dict = json.loads(json_string)
+        time_obj.date = time_dict["date"]
+        time_obj.time = time_dict["time"]
+        return time_obj
+
+
 class Message:
     """Class to represent message exchanged between users"""
-    def __init__(self, message_type: str, content: str, sending_time: str):
+    def __init__(self, message_type: str, content: str, sending_time: Time,
+                 user_id: str, target_user_id: str):
+
         self.type = message_type
         self.content = content
         self.sending_time = sending_time
-        # self.user_id = user_id
-        # self.target_user_id = target_user_id
+        self.user_id = user_id
+        self.target_user_id = target_user_id
 
     @property
     def json_string(self):
@@ -54,9 +106,9 @@ class Message:
         return json.dumps(
             {"type": self.type,
             "content": self.content,
-            "sending_time": self.sending_time
-            # "user_id": self.user_id,
-            # "target_user_id": self.target_user_id
+            "sending_time": self.sending_time.json_string,
+            "user_id": self.user_id,
+            "target_user_id": self.target_user_id
             })
 
     @classmethod
@@ -65,18 +117,21 @@ class Message:
         return Message(
             message_type=data['type'],
             content=data['content'],
-            sending_time=data['sending_time']
-            # user_id=data['user_id'],
-            # target_user_id=data['target_user_id']
+            sending_time=Time.from_string(data['sending_time']),
+            user_id=data['user_id'],
+            target_user_id=data['target_user_id']
         )
+
+    def __str__(self):
+        return f"User {self.user_id} ({self.sending_time}): {self.content}"
 
 
 class Request:
     """Class to represent request to or from server"""
-    def __init__(self, request_type: str, content: str, user_id: str=None):
+    def __init__(self, request_type: str, user_id: str=None, content: str=None):
         self.type = request_type
         self.user_id = user_id
-        self.content = content
+        self.content = content if content is not None else {}
 
     @property
     def json_string(self):
@@ -93,6 +148,9 @@ class Request:
             user_id=data["user_id"],
             content=data["content"]
         )
+    
+    def __str__(self):
+        return self.json_string
 
 
 class Connection:
@@ -100,6 +158,7 @@ class Connection:
     def __init__(self, user_id: str, target_user_id: str):
         self.user_id = user_id
         self.target_user_id = target_user_id
+
         self.peer_connection: RTCPeerConnection | None = None
         self.data_channel: RTCDataChannel | None = None
         self.websocket = None
@@ -116,11 +175,15 @@ class Connection:
         self.role = None
 
     async def p2p_disconnect(self):
-        if self.peer_connection:
-            await self.peer_connection.close()
+        if self.data_channel is not None and self.data_channel.readyState == "open":
+            self.data_channel.close()
+            print("Data channel closed")
 
-        if self.data_channel and self.data_channel.readyState == "open":
-            await self.data_channel.close()
+        if self.peer_connection is not None:
+            await self.peer_connection.close()
+            print("Peer conenction closed")
+
+        print("Connection closed")
 
         self.peer_connection = None
         self.data_channel = None
@@ -173,8 +236,8 @@ class Connection:
         def on_message(message):
             message = Message.from_string(message)
             if message.type != "message":
-                raise ValueError("Incorrect message type")
-            print(f"Peer ({message.sending_time}): {message.content}")
+                raise ValueError("Incorrect message type.")
+            print(message)
             # logging.debug("Message received: %s", message)
 
         @data_channel.on('close')
@@ -209,37 +272,34 @@ class Connection:
 
         offer_request = Request(
             request_type="share_offer",
+            user_id=self.user_id,
             content={"type": pc.localDescription.type,
                     "sdp": pc.localDescription.sdp}
         )
 
         await self.websocket.send(offer_request.json_string)
-        print(f"Offer sent: {offer_request.json_string}")
+        print(f"Offer sent: {offer_request}")
 
         response = await self.websocket.recv()
         data = Request.from_string(response)
-        print(f"Received answer: {data.json_string}")
+        print(f"Received answer: {data}")
 
         if data.type != "share_answer":
-            raise ValueError("Incorrect response")
+            raise IncorrectRequestTypeError("Incorrect response to offer")
 
         answer = data.content
-
-        if answer["type"] == "answer":
-            answer = RTCSessionDescription(sdp=answer["sdp"], type="answer")
-            await pc.setRemoteDescription(answer)
-            print("Remote description was set")
-        else:
-            raise ValueError("Incorrect response")
+        answer = RTCSessionDescription(sdp=answer["sdp"], type="answer")
+        await pc.setRemoteDescription(answer)
+        print("Remote description was set")
 
         try:
             await asyncio.wait_for(self.is_p2p_connected.wait(), 10)
             self.data_channel = dc
             self.p2p_connection_state = "connected"
         except asyncio.TimeoutError:
-            return False
+            return False # Connection failed
 
-        return True
+        return True # Connection successful
 
     async def __connect_answer(self) -> bool:
         """Function to connect as answer"""
@@ -272,50 +332,33 @@ class Connection:
         print(f"Received offer: {data.json_string}")
 
         if data.type != "share_offer":
-            raise ValueError("Incorrect response")
+            raise IncorrectRequestTypeError("Request is not share_offer.")
 
         offer = data.content
 
-        if offer["type"] == "offer":
-            offer = RTCSessionDescription(sdp=offer["sdp"], type="offer")
-            await pc.setRemoteDescription(offer)
+        offer = RTCSessionDescription(sdp=offer["sdp"], type="offer")
+        await pc.setRemoteDescription(offer)
 
-            answer = await pc.createAnswer()
-            await pc.setLocalDescription(answer)
+        answer = await pc.createAnswer()
+        await pc.setLocalDescription(answer)
 
-            answer = Request(
-                request_type="share_answer",
-                content={"sdp": pc.localDescription.sdp,
-                        "type": pc.localDescription.type}
-            )
+        answer = Request(
+            request_type="share_answer",
+            content={"sdp": pc.localDescription.sdp,
+                    "type": pc.localDescription.type}
+        )
 
-            await self.websocket.send(answer.json_string)
-            print(f"Answer sent: {answer.json_string}")
-        else:
-            raise ValueError("Incorrect response type.")
+        await self.websocket.send(answer.json_string)
+        print(f"Answer sent: {answer.json_string}")
 
         try:
             await asyncio.wait_for(self.is_p2p_connected.wait(), 10)
             self.data_channel = dc
             self.p2p_connection_state = "connected"
         except asyncio.TimeoutError:
-            return False
+            return False # Connection failed
 
-        return True
-
-    # async def __parse_role(self, target_user_id: str):
-    #     connection_request = Request(
-    #             request_type="connection",
-    #             user_id=self.user_id,
-    #             content={"user_id": self.user_id, "target_user_id": target_user_id})
-
-    #     await self.websocket.send(connection_request.json_string)
-    #     print(f"Connection request sended: {connection_request.json_string}")
-
-    #     response = await self.websocket.recv()
-    #     role = Request.from_string(response)
-    #     print(f"Role received: {role.json_string}")
-    #     return role.content["role"]
+        return True # Connection successful
 
     async def __establish_p2p_connection(self, role: str) -> RTCDataChannel | None:
         print("Establish p2p connection")
@@ -325,7 +368,7 @@ class Connection:
             case "answer":
                 is_p2p_connected = await self.__connect_answer()
             case _:
-                raise ValueError("Incorrect role")
+                raise ValueError("Incorrect role.")
 
         return is_p2p_connected
 
@@ -336,16 +379,16 @@ class Connection:
 
         register_request = Request(
             request_type="register_request",
-            content={"user_id": self.user_id}
+            user_id=self.user_id
         )
 
         await websocket.send(register_request.json_string)
-        print(f"Register request sended: {register_request.json_string}")
+        print(f"Register request sended: {register_request}")
         self.is_connected_websocket = True
 
         register_response = await websocket.recv()
         register_response = Request.from_string(register_response)
-        print(f"Register response received: {register_response.json_string}")
+        print(f"Register response received: {register_response}")
 
         match register_response.type:
             case "connection_request":
@@ -353,8 +396,6 @@ class Connection:
                 await self.__establish_p2p_connection(self.role)
 
             case "wait_request":
-                # connection_init_task = asyncio.create_task(wait_for_connection_init())
-                
                 receive_request_task = asyncio.create_task(self.websocket.recv())
                 local_connection_task = asyncio.create_task(self.local_connection_initiated.wait())
                 await asyncio.wait(
@@ -373,54 +414,57 @@ class Connection:
                 except asyncio.CancelledError:
                     return
 
-                # if connection_request.type == "client_not_registered_error":
-                #     raise ValueError("Target user is not registered")
-
                 connection_request = Request.from_string(connection_request)
                 self.role = connection_request.content["role"]
                 answer_connection_request = Request(
-                    request_type="connect_to",
-                    content={"role": "answer", "user_id": self.user_id, "target_user_id": self.target_user_id}
+                    request_type="connect_to_request",
+                    user_id=self.user_id,
+                    content={"role": "answer", "target_user_id": self.target_user_id}
                 )
                 await self.websocket.send(answer_connection_request.json_string)
-                print(f"Connect to request sent: {answer_connection_request.json_string}")
+                print(f"Connect to request sent: {answer_connection_request}")
                 await self.__establish_p2p_connection(self.role)
 
             case _:
-                raise ValueError("Incorrect register response")
+                raise ConnectionTimeoutError("Incorrect response to register request")
 
     async def connect_to_peer(self) -> bool:
         self.p2p_connection_state = "connecting"
 
         connection_request = Request(
             request_type="connection_request",
-            content={"user_id": self.user_id, "target_user_id": self.target_user_id}
+            user_id=self.user_id,
+            content={"target_user_id": self.target_user_id}
         )
         await self.websocket.send(connection_request.json_string)
         print(f"Connection request sent: {connection_request.json_string}")
 
         connection_response = await self.websocket.recv()
         connection_response = Request.from_string(connection_response)
-        print(f"Connection response sent: {connection_response.json_string}")
-
+        print(f"Connection response received: {connection_response}")
 
         if connection_response.type == "client_not_registered_error":
-            raise ValueError("Target user is not registered")
+            raise UserNotRegisteredError("Target user is not registered.")
+
+        offer_connect_to_request = Request(
+            request_type="connect_to_request",
+            user_id=self.user_id,
+            content={"target_user_id": self.target_user_id, "role": "offer"}
+        )
+        await self.websocket.send(offer_connect_to_request.json_string)
 
         self.role = connection_response.content["role"]
-
         is_p2p_connected = await self.__establish_p2p_connection(self.role)
 
         if is_p2p_connected:
             self.connection_type = "p2p_connection"
             self.p2p_connection_state = "connected"
-            return True
-        return False
+            return True # Connection successful
+        return False # Connection failed
 
 
     async def connect(self) -> bool:
         self.local_connection_initiated.set()
-
 
         if self.is_p2p_connected.is_set():
             return
@@ -428,69 +472,227 @@ class Connection:
         if not self.is_connected_websocket:
             await self.connect_to_server()
 
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0.05)
 
         if self.p2p_connection_state == "connecting":
             try:
                 asyncio.wait_for(self.is_p2p_connected.wait(), 10)
             except asyncio.TimeoutError:
-                raise Exception("Connection failed.")
+                raise ConnectionTimeoutError("Connection failed.")
 
         if self.p2p_connection_state == "disconnected":
             connection_result = await self.connect_to_peer()
-            print(connection_result)
+
+            if not connection_result:
+                raise ConnectionError("Connection failed")
+
             return
 
         raise ValueError("Invalid p2p connection state")
 
 
-        # self.role = await self.__parse_role(self.target_user_id)
+class Chat:
+    """Class to represent chat between two users"""
+    def __init__(self):
+        user_id, target_user_id = self.__parse_roles()
+        self.user_id = user_id
+        self.target_user_id = target_user_id
+        self.__message_queue = asyncio.Queue()
+        self.__connection = Connection(self.user_id, self.target_user_id)
 
-        # is_p2p_connected = await self.__establish_p2p_connection(self.role)
+    @staticmethod
+    def __parse_roles():
+        user_id = input("Enter your user ID: ").strip()
+        target_user_id = input("Enter the ID of the user you want to connect to: ").strip()
+        return user_id, target_user_id
 
-        # if is_p2p_connected:
-        #     self.connection_type = "p2p_connection"
-        #     self.p2p_connection_state = "connected"
-        #     return True
-        # self.p2p_connection_state = "disconnected"
-        # return False
+    async def __on_disconnect(self) -> None:
+        await self.__connection.data_channel_closing_event.wait()
+        await self.__connection.p2p_disconnect()
+
+    async def __message_loop(self):
+        """Asynchronous function which handles receiving messages"""
+        print()
+        while True:
+            message = await ainput('You: ')
+            if message:
+                self.__message_queue.put_nowait(Message(
+                                        message_type="message",
+                                        content=message,
+                                        sending_time=Time(),
+                                        user_id=self.user_id,
+                                        target_user_id=self.target_user_id
+                                        ))
+
+    async def __send_message(self, message: Message):
+        await self.__connection.connect()
+        self.__connection.data_channel.send(message.json_string)
+
+    async def __send_message_loop(self):
+        while True:
+            message = await self.__message_queue.get()
+            await self.__send_message(message)
+
+    async def __close(self):
+        await self.__connection.websocket.close()
+        await self.__connection.p2p_disconnect()
+
+    async def open(self):
+        try:
+            disconnect_task = asyncio.create_task(self.__on_disconnect())
+            message_task = asyncio.create_task(self.__message_loop())
+            send_task = asyncio.create_task(self.__send_message_loop())
+            connect_to_server_task = asyncio.create_task(self.__connection.connect_to_server())
+
+            await asyncio.gather(connect_to_server_task, disconnect_task, message_task, send_task)
+
+        finally:
+            await self.__close()
 
 
+class Server:
+    SUPPORTED_REQUESTS = {"register_request", "connection_request", "connect_to_request"}
+
+    def __init__(self, ip: str, port: int):
+        self.ip = ip
+        self.port = port
+        self.__clients: dict[User] = {}
+
+    async def __connect_offer(self, websocket, target_user_id: str):
+        """Receive oferer's SDP and send it to the target user"""
+        target_user_websocket = self.__clients[target_user_id].websocket
+
+        offer = await websocket.recv()
+        print(f"Get offer: {offer}\n")
+        await target_user_websocket.send(offer)
+
+    async def __connect_answer(self, websocket, target_user_id: str):
+        """Receive oferer's SDP and send it to the target user"""
+        target_user_websocket = self.__clients[target_user_id].websocket
+
+        answer = await websocket.recv()
+        print(f"Get answer: {answer}\n")
+        await target_user_websocket.send(answer)
+
+    def __disconnect_user(self, user_id: str):
+        """Disconnect user with given user id"""
+        if user_id:
+            disconnected_user = self.__clients[user_id]
+            if disconnected_user.pended_user_id:
+                self.__clients[disconnected_user.pended_user_id].is_pended = False
+                self.__clients[disconnected_user.pended_user_id].pending_user_id = None
+            self.__clients[user_id].disconnect()
+            print(f"Disconnected user: {user_id}")
+
+    async def __handle_register_request(self, websocket, user_id: str):
+        client = self.__clients.setdefault(user_id, User())
+        client.websocket = websocket
+        client.is_online = True
+
+        # Here stored messages should be sent to the user as one request
+        # Messages should be ordered in some way
+
+        target_user_id = self.__clients[user_id].pending_user_id
+
+        if self.__clients[user_id].is_pended:
+            connection_establishment_request = Request(
+                request_type="connection_request",
+                content={"user_id": self.__clients[user_id].pending_user_id, "role": "answer"}
+            )
+            await websocket.send(connection_establishment_request.json_string)
+            print(f"Connection establishment request sent: {connection_establishment_request.json_string}")
+            self.__clients[user_id].role = "answer"
+
+            connection_establishment_request = Request(
+                request_type="connection_request",
+                content={"user_id": user_id, "role": "offer"}
+            )
+            await self.__clients[target_user_id].websocket.send(connection_establishment_request.json_string)
+            print(f"Connection establishment request sent: {connection_establishment_request.json_string}")
+            self.__clients[target_user_id].role = "offer"
+
+            await self.__connect_answer(websocket, target_user_id)
+
+        else:
+            wait_request = Request(
+            request_type="wait_request",
+            )
+            await websocket.send(wait_request.json_string)
+            print(f"Wait request sent: {wait_request.json_string}")
+
+    async def __handle_connection_request(self, websocket, user_id: str, data: dict):
+        target_user_id = data["target_user_id"]
+
+        if target_user_id not in self.__clients:
+            error_request = Request(
+                request_type="client_not_registered_error",
+            )
+            await websocket.send(error_request.json_string)
+
+        elif self.__clients[target_user_id].is_online:
+            connection_establishment_request = Request(
+                request_type="connection_establishment_request",
+                content={"user_id": user_id, "role": "answer"}
+            )
+
+            await self.__clients[target_user_id].websocket.send(connection_establishment_request.json_string)
+            print(f"Connection establishment request sent to answerer: {connection_establishment_request.json_string}")
+            self.__clients[target_user_id].role = "answer"
+
+            connection_establishment_request = Request(
+                request_type="connection_establishment_request",
+                content={"role": "offer"}
+            )
+            await websocket.send(connection_establishment_request.json_string)
+            print(f"Connection establishment request sent to offerer: {connection_establishment_request.json_string}")
+            self.__clients[target_user_id].role = "offer"
+
+        else:
+            self.__clients[target_user_id].is_pended = True
+            self.__clients[target_user_id].pending_user_id = user_id
+            self.__clients[user_id].pended_user_id = target_user_id
+
+    async def __handle_connect_to_request(self, websocket, data: dict):
+        target_user_id = data["target_user_id"]
+        role = data["role"]
+
+        if role == "offer":
+            await self.__connect_offer(websocket, target_user_id)
+        elif role == "answer":
+            await self.__connect_answer(websocket, target_user_id)
 
 
+    ##############################
+    async def __websocket_handler(self, websocket):
+        print("New client connected.")
+        try:
+            async for request in websocket:
+                request = Request.from_string(request)
+                print(f"Request: {request.json_string}\n")
+                request_type = request.type
+                user_id = request.user_id
+                data = request.content
 
-# class Chat:
-#     """Class to represent chat between two users"""
-#     def __init__(self, user_id: str, target_user_id: str):
-#         self.user_id = user_id
-#         self.target_user_id = target_user_id
-#         self.__message_queue = asyncio.Queue()
-#         self.__connection = Connection(self.user_id, self.target_user_id)
+                if request_type not in self.SUPPORTED_REQUESTS:
+                    raise IncorrectRequestTypeError(f"Request with unsopported type ({request_type}) received")
 
-#     async def message_loop(self):
-#         """Asynchronous function which handles receiving messages"""
-#         print()
-#         while True:
-#             message = await ainput('You: ')
-#             if message:
-#                 self.__message_queue.put_nowait(Message(message_type="message",
-#                                                         content=message,
-#                                                         sending_time=datetime.now().strftime('%H:%M:%S')))
+                match request_type:
+                    case "register_request":
+                        await self.__handle_register_request(websocket, user_id)
+                    case "connection_request":
+                        await self.__handle_connection_request(websocket, user_id, data)
+                    case "connect_to_request":
+                        await self.__handle_connect_to_request(websocket, data)
 
-#     async def send_message(self, message: Message):
-#         connection = self.__connection
-#         if connection.connection_state == "connected":
-#             print('already connected')
-#             connection.data_channel.send(message.json_string)
-#         else:
-#             print('need to connect connected')
-#             is_connected = await connection.connect()
-#             if is_connected:
-#                 connection.data_channel.send(message.json_string)
-#             else:
-#                 raise Exception("Connection failed")
+        except json.JSONDecodeError:
+            print("Error: Received invalid JSON")
+        except websockets.exceptions.ConnectionClosed:
+            print(f"Connection closed for user: {user_id}")
+        finally:
+            self.__disconnect_user(user_id)
+            await websocket.close()
 
-#     async def send_message_loop(self):
-#         while True:
-#             message = await self.__message_queue.get()
-#             await self.send_message(message)
+    async def run(self):
+        async with websockets.serve(self.__websocket_handler, self.ip, self.port):
+            print(f"WebSocket server is running on ws://{self.ip}:{self.port}")
+            await asyncio.Future()
