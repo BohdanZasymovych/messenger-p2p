@@ -5,6 +5,7 @@ from objects import Chat
 
 
 async def main():
+    """Launches chat"""
     chat = Chat()
     await chat.open()
 
