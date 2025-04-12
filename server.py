@@ -1,3 +1,4 @@
+"""Server for handling p2p connection signaling process"""
 import asyncio
 from objects import Server
 

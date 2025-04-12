@@ -1,5 +1,4 @@
 """p2p messenger with signaling process via server"""
-
 import asyncio
 from objects import Chat
 

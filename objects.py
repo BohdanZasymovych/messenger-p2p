@@ -169,7 +169,7 @@ class Connection:
         self.data_channel: RTCDataChannel | None = None
         self.websocket = None
 
-        self.connection_type = None
+        # self.connection_type = None
         self.is_connected_websocket = False
         self.is_p2p_connected = asyncio.Event()
         self.p2p_connection_state = "disconnected"
@@ -191,6 +191,7 @@ class Connection:
         Disconnects user from server and
         runs function waiting for connection request if data channel was closed by another peer
         """
+        print("p2p disconnect triggred")
         if self.data_channel is not None and self.data_channel.readyState == "open":
             self.data_channel.close()
 
@@ -203,7 +204,7 @@ class Connection:
         self.peer_connection = None
         self.data_channel = None
         self.is_p2p_connected.clear()
-        self.connection_type = None
+        # self.connection_type = None
         self.role = None
 
     async def server_disconect(self):
@@ -316,7 +317,7 @@ class Connection:
         try:
             await asyncio.wait_for(self.is_p2p_connected.wait(), 10)
             self.data_channel = dc
-            self.p2p_connection_state = "connected"
+            # self.p2p_connection_state = "connected"
         except asyncio.TimeoutError:
             return False # Connection failed
 
@@ -374,7 +375,7 @@ class Connection:
         try:
             await asyncio.wait_for(self.is_p2p_connected.wait(), 10)
             self.data_channel = dc
-            self.p2p_connection_state = "connected"
+            # self.p2p_connection_state = "connected"
         except asyncio.TimeoutError:
             return False # Connection failed
 
@@ -382,14 +383,19 @@ class Connection:
 
     async def __establish_p2p_connection(self, role: str) -> RTCDataChannel | None:
         """Runs conenct function depending on user's role"""
-        print("Establish p2p connection")
         match role:
             case "offer":
+                self.role = "offer"
                 is_p2p_connected = await self.__connect_offer()
             case "answer":
+                self.role = "answer"
                 is_p2p_connected = await self.__connect_answer()
             case _:
                 raise ValueError("Incorrect role.")
+
+        if is_p2p_connected:
+            self.is_p2p_connected.set()
+            self.p2p_connection_state = "connected"
 
         return is_p2p_connected
 
@@ -413,7 +419,7 @@ class Connection:
             return
 
         connection_request = Request.from_string(connection_request)
-        self.role = connection_request.content["role"]
+        role = connection_request.content["role"]
         answer_connection_request = Request(
             request_type="connect_to_request",
             user_id=self.user_id,
@@ -421,7 +427,7 @@ class Connection:
         )
         await self.websocket.send(answer_connection_request.json_string)
         print(f"Connect to request sent: {answer_connection_request}")
-        await self.__establish_p2p_connection(self.role)
+        await self.__establish_p2p_connection(role)
 
     async def connect_to_server(self):
         """
@@ -446,12 +452,12 @@ class Connection:
 
         match register_response.type:
             case "connection_establishment_request":
-                self.role = register_response.content["role"]
-                await self.__establish_p2p_connection(self.role)
+                role = register_response.content["role"]
+                await self.__establish_p2p_connection(role)
             case "wait_request":
                 await self.__wait_for_connection_request()
             case _:
-                raise ConnectionTimeoutError("Incorrect response to register request")
+                raise IncorrectRequestTypeError("Incorrect response to register request")
 
     async def connect_to_peer(self) -> bool:
         """Tries to connect user to other peer"""
@@ -472,20 +478,22 @@ class Connection:
         if connection_response.type == "client_not_registered_error":
             raise UserNotRegisteredError("Target user is not registered on the server.")
 
-        self.role = connection_response.content["role"]
+        role = connection_response.content["role"]
         offer_connect_to_request = Request(
             request_type="connect_to_request",
             user_id=self.user_id,
-            content={"target_user_id": self.target_user_id, "role": self.role}
+            content={"target_user_id": self.target_user_id, "role": role}
         )
         await self.websocket.send(offer_connect_to_request.json_string)
 
-        is_p2p_connected = await self.__establish_p2p_connection(self.role)
+        is_p2p_connected = await self.__establish_p2p_connection(role)
 
         if is_p2p_connected:
-            self.connection_type = "p2p_connection"
+            # self.connection_type = "p2p_connection"
+            self.is_p2p_connected.set()
             self.p2p_connection_state = "connected"
-            return True # Connection successful
+            return True # Connected successfully
+
         return False # Connection failed
 
 
@@ -505,13 +513,11 @@ class Connection:
             try:
                 asyncio.wait_for(self.is_p2p_connected.wait(), 10)
             except asyncio.TimeoutError:
-                raise ConnectionTimeoutError("Connection failed.")
+                print("Connection timeout in connectio.connect()")
+                self.is_p2p_connected = False
+                self.p2p_connection_state = "disconnected"
 
-        if self.p2p_connection_state == "disconnected":
-            connection_result = await self.connect_to_peer()
-
-            if not connection_result:
-                raise ConnectionError("Connection failed")
+        await self.connect_to_peer()
 
 
 class Chat:
@@ -544,6 +550,15 @@ class Chat:
                                         target_user_id=self.target_user_id
                                         ))
 
+    async def __send_message_to_server(self, message: Message):
+        relay_message_request = Request(
+            request_type="relay_message_request",
+            user_id=self.user_id,
+            content={"message": message.json_string, "target_user": self.target_user_id}
+        )
+        await self.__connection.websocket.send(relay_message_request.json_string)
+        print("Message was sent to the server")
+
     async def __send_message(self, message: Message):
         """
         Connects to otehr peer.
@@ -551,7 +566,11 @@ class Chat:
         sends message through open data channel
         """
         await self.__connection.connect()
-        self.__connection.data_channel.send(message.json_string)
+        if self.__connection.is_p2p_connected.is_set() and self.__connection.p2p_connection_state == "connected":
+            self.__connection.data_channel.send(message.json_string)
+        elif self.__connection.is_connected_websocket:
+            print(f"Is p2p connected: {self.__connection.is_p2p_connected.is_set()}, p2p connection state: {self.__connection.p2p_connection_state}")
+            await self.__send_message_to_server(message)
 
     async def __send_message_loop(self):
         """If message queue is not empty gets message from it and sends it"""
@@ -579,7 +598,7 @@ class Chat:
 
 class Server:
     """Class to represent server which handles establishing connection between users"""
-    SUPPORTED_REQUESTS = {"register_request", "connection_request", "connect_to_request"}
+    SUPPORTED_REQUESTS = {"register_request", "connection_request", "connect_to_request", "relay_message_request"}
 
     def __init__(self, ip: str, port: int):
         self.ip = ip
@@ -715,6 +734,8 @@ class Server:
                         await self.__handle_connection_request(websocket, user_id, data)
                     case "connect_to_request":
                         await self.__handle_connect_to_request(websocket, data)
+                    case "relay_message_request":
+                        pass
 
         except websockets.exceptions.ConnectionClosed:
             print(f"Connection closed for user: {user_id}")
