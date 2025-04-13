@@ -2,6 +2,7 @@
 import json
 import asyncio
 from datetime import datetime
+import uuid
 from aioconsole import ainput
 from aiortc import (RTCPeerConnection,
                     RTCSessionDescription,
@@ -16,6 +17,8 @@ ICE_CONFIG = RTCConfiguration(
 )
 
 SERVER_URL = "ws://0.0.0.0:8000"
+
+MESSAGE_NAMESPACE = uuid.UUID("1bc43a13-70f6-49c3-bea7-26f4fcc5b6c8")
 
 
 class IncorrectRequestTypeError(Exception):
@@ -130,18 +133,21 @@ class Message:
     @property
     def unique_id(self):
         """Returns unique id of the message based on hash"""
-        return hash(self)
+        message_info = f"""{self.content}|{self.sending_time.date}
+|{self.sending_time.time}|{self.user_id}|{self.target_user_id}"""
+
+        return str(uuid.uuid5(MESSAGE_NAMESPACE, message_info))
 
     def __str__(self):
         return f"User {self.user_id} ({self.sending_time}): {self.content}"
 
-    def __hash__(self):
-        return hash(
-                (self.type,
-                self.sending_time.json_string,
-                self.content, self.user_id,
-                self.target_user_id)
-                )
+    # def __hash__(self):
+    #     return hash(
+    #             (self.type,
+    #             self.sending_time.json_string,
+    #             self.content, self.user_id,
+    #             self.target_user_id)
+    #             )
 
 
 class Request:
@@ -230,8 +236,8 @@ class Connection:
 
     async def __on_disconnect(self) -> None:
         """
-        Waits till data channel was closed, clears user
-        and if disconnect was initialized by another peer
+        Waits untill data channel was closed, clears user
+        and, if disconnect was initialized by another peer,
         launches function waiting for connection request
         """
         while True:
@@ -641,7 +647,7 @@ class Server:
             self.__clients[disconnected_user.pended_user_id].is_pended = False
             self.__clients[disconnected_user.pended_user_id].pending_user_id = None
 
-            # Here messages which were not sent to target user
+            # Here messages which were not sent to the target user
             # should be received from user as one request
             # and stored in the database
 
