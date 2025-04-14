@@ -10,6 +10,7 @@ from aiortc import (RTCPeerConnection,
                     RTCConfiguration,
                     RTCIceServer)
 import websockets
+import asyncpg
 
 
 ICE_CONFIG = RTCConfiguration(
@@ -19,6 +20,19 @@ ICE_CONFIG = RTCConfiguration(
 SERVER_URL = "ws://0.0.0.0:8000"
 
 MESSAGE_NAMESPACE = uuid.UUID("1bc43a13-70f6-49c3-bea7-26f4fcc5b6c8")
+
+DATABASE_URL = "postgresql://messenger_host:ilovemathanalysis@localhost:5432/messenger_db"
+
+async def save_message_to_db(user_id: str, target_user_id: str, content: str):
+    conn = await asyncpg.connect(DATABASE_URL)
+    try:
+        await conn.execute("""
+            INSERT INTO messages (user_id, target_user_id, content)
+            VALUES ($1, $2, $3);
+        """, user_id, target_user_id, content)
+        print(f"Message from {user_id} to {target_user_id} saved to database.")
+    finally:
+        await conn.close()
 
 
 class IncorrectRequestTypeError(Exception):
@@ -319,11 +333,11 @@ class Connection:
                     "sdp": pc.localDescription.sdp}
         )
         await self.websocket.send(offer_request.json_string)
-        print(f"Offer sent: {offer_request}")
+        # print(f"Offer sent: {offer_request}")
 
         response = await self.websocket.recv()
         data = Request.from_string(response)
-        print(f"Received answer: {data}")
+        # print(f"Received answer: {data}")
 
         if data.type != "share_answer_request":
             raise IncorrectRequestTypeError("Incorrect response to offer")
@@ -369,7 +383,7 @@ class Connection:
 
         response = await self.websocket.recv()
         data = Request.from_string(response)
-        print(f"Received offer: {data}")
+        # print(f"Received offer: {data}")
 
         if data.type != "share_offer_request":
             raise IncorrectRequestTypeError("Request is not share_offer.")
@@ -389,7 +403,7 @@ class Connection:
         )
 
         await self.websocket.send(answer.json_string)
-        print(f"Answer sent: {answer.json_string}")
+        # print(f"Answer sent: {answer.json_string}")
 
         try:
             await asyncio.wait_for(self.is_p2p_connected.wait(), 10)
@@ -445,7 +459,7 @@ class Connection:
             content={"role": "answer", "target_user_id": self.target_user_id}
         )
         await self.websocket.send(answer_connection_request.json_string)
-        print(f"Connect to request sent: {answer_connection_request}")
+        # print(f"Connect to request sent: {answer_connection_request}")
         await self.__establish_p2p_connection(role)
 
     async def connect_to_server(self):
@@ -462,12 +476,12 @@ class Connection:
         )
 
         await websocket.send(register_request.json_string)
-        print(f"Register request sended: {register_request}")
+        # print(f"Register request sended: {register_request}")
         self.is_connected_websocket = True
 
         register_response = await websocket.recv()
         register_response = Request.from_string(register_response)
-        print(f"Register response received: {register_response}")
+        # print(f"Register response received: {register_response}")
 
         match register_response.type:
             case "connection_establishment_request":
@@ -488,11 +502,11 @@ class Connection:
             content={"target_user_id": self.target_user_id}
         )
         await self.websocket.send(connection_request.json_string)
-        print(f"Connection request sent: {connection_request.json_string}")
+        # print(f"Connection request sent: {connection_request.json_string}")
 
         connection_response = await self.websocket.recv()
         connection_response = Request.from_string(connection_response)
-        print(f"Connection response received: {connection_response}")
+        # print(f"Connection response received: {connection_response}")
 
         if connection_response.type == "client_not_registered_error":
             raise UserNotRegisteredError("Target user is not registered on the server.")
@@ -765,6 +779,28 @@ class Server:
         elif role == "answer":
             await self.__connect_answer(websocket, target_user_id)
 
+    async def __handle_relay_message_request(self, user_id: str, data: dict):
+        """
+        Обробляє запит relay_message_request і зберігає повідомлення в базу даних.
+        """
+        try:
+            message_json = data["message"]
+            target_user = data["target_user"]
+
+            message = Message.from_string(message_json)
+
+            await save_message_to_db(
+                user_id=message.user_id,
+                target_user_id=message.target_user_id,
+                content=message.content
+            )
+            print(f"Message from {message.user_id} to {message.target_user_id} saved to database.")
+
+        except KeyError as e:
+            print(f"Missing key in relay_message_request: {e}")
+        except Exception as e:
+            print(f"Error while handling relay_message_request: {e}")
+
     async def __websocket_handler(self, websocket):
         print("New client connected.")
         try:
@@ -786,7 +822,7 @@ class Server:
                     case "connect_to_request":
                         await self.__handle_connect_to_request(websocket, data)
                     case "relay_message_request":
-                        pass
+                        await self.__handle_relay_message_request(user_id, data)
 
         except websockets.exceptions.ConnectionClosed:
             print(f"Connection closed for user: {user_id}")
