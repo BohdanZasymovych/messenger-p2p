@@ -513,6 +513,7 @@ class Connection:
             self.p2p_connection_state = "connected"
             return True # Connected successfully
 
+        self.p2p_connection_state = "disconnected"
         return False # Connection failed
 
 
@@ -541,6 +542,8 @@ class Connection:
 
 class Chat:
     """Class to represent chat between two users"""
+    P2P_CONNECTION_TIMEOUT = 10 # seconds
+
     def __init__(self):
         user_id, target_user_id = self.__get_id()
         self.user_id = user_id
@@ -554,6 +557,7 @@ class Chat:
         user_id = input("Enter your user ID: ").strip()
         target_user_id = input("Enter the ID of the user you want to connect to: ").strip()
         return user_id, target_user_id
+
 
     async def __message_loop(self):
         """Receives messages from user and adds them to the message queue"""
@@ -584,12 +588,40 @@ class Chat:
         If connection is already active or connection was successful
         sends message through open data channel
         """
-        await self.__connection.connect()
-        if self.__connection.is_p2p_connected.is_set() and self.__connection.p2p_connection_state == "connected":
-            self.__connection.data_channel.send(message.json_string)
-        elif self.__connection.is_connected_websocket:
-            print(f"Is p2p connected: {self.__connection.is_p2p_connected.is_set()}, p2p connection state: {self.__connection.p2p_connection_state}")
-            await self.__send_message_to_server(message)
+        connection = self.__connection
+
+        match connection.p2p_connection_state:
+            case "connected":
+                connection.data_channel.send(message.json_string)
+
+            case "connecting":
+                print(f"message: {message}")
+                await self.__send_message_to_server(message)
+
+            case "disconnected":
+                wait_for_connection_task = asyncio.create_task(connection.connect())
+                wait_for_connection_timeout = asyncio.create_task(asyncio.sleep(self.P2P_CONNECTION_TIMEOUT))
+
+                await asyncio.wait(
+                    [wait_for_connection_task, wait_for_connection_timeout],
+                    return_when=asyncio.FIRST_COMPLETED
+                )
+
+                if wait_for_connection_task.done():
+                    wait_for_connection_timeout.cancel()
+                    try:
+                        await wait_for_connection_timeout
+                    except asyncio.CancelledError:
+                        pass
+
+                    if connection.is_p2p_connected.is_set() and connection.p2p_connection_state == "connected":
+                        connection.data_channel.send(message.json_string)
+                    elif connection.is_connected_websocket:
+                        print(f"Is p2p connected: {connection.is_p2p_connected.is_set()}, p2p connection state: {connection.p2p_connection_state}")
+                        await self.__send_message_to_server(message)
+                else:
+                    await self.__send_message_to_server(message)
+
 
     async def __send_message_loop(self):
         """If message queue is not empty gets message from it and sends it"""
