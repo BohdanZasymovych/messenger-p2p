@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  database:
+    image: postgres:14
+    container_name: messenger_db
+    environment:
+      POSTGRES_USER: messenger_host
+      POSTGRES_PASSWORD: ilovemathanalysis
+      POSTGRES_DB: messenger_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  server:
+    build:
+      context: .
+      dockerfile: prob.Dockerfile  # Використовуємо ваш Dockerfile
+    container_name: messenger_server
+    environment:
+      DATABASE_URL: postgresql://messenger_host:ilovemathanalysis@database:5432/messenger_db
+    depends_on:
+      - database
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+
+volumes:
+  postgres_data:

@@ -21,7 +21,7 @@ SERVER_URL = "ws://0.0.0.0:8000"
 
 MESSAGE_NAMESPACE = uuid.UUID("1bc43a13-70f6-49c3-bea7-26f4fcc5b6c8")
 
-DATABASE_URL = "postgresql://messenger_host:ilovemathanalysis@localhost:5432/messenger_db"
+DATABASE_URL = "postgresql://messenger_host:ilovemathanalysis@database:5432/messenger_db"
 
 async def save_message_to_db(user_id: str, target_user_id: str, content: str):
     conn = await asyncpg.connect(DATABASE_URL)
