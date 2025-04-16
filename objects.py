@@ -21,7 +21,7 @@ SERVER_URL = "ws://0.0.0.0:8000"
 
 MESSAGE_NAMESPACE = uuid.UUID("1bc43a13-70f6-49c3-bea7-26f4fcc5b6c8")
 
-DATABASE_URL = "postgresql://messenger_host:ilovemathanalysis@database:5432/messenger_db"
+DATABASE_URL = "postgresql://messenger_host:ilovemathanalysis@localhost:5432/messenger_db"
 
 async def save_message_to_db(user_id: str, target_user_id: str, content: str):
     conn = await asyncpg.connect(DATABASE_URL)
@@ -31,6 +31,27 @@ async def save_message_to_db(user_id: str, target_user_id: str, content: str):
             VALUES ($1, $2, $3);
         """, user_id, target_user_id, content)
         print(f"Message from {user_id} to {target_user_id} saved to database.")
+    finally:
+        await conn.close()
+
+async def get_messages_from_db(user_id: str, target_user_id: str):
+    conn = await asyncpg.connect(DATABASE_URL)
+    try:
+        rows = await conn.fetch("""
+            SELECT content FROM messages
+            WHERE user_id = $1 AND target_user_id = $2;
+        """, user_id, target_user_id)
+
+        await conn.execute("""
+            DELETE FROM messages
+            WHERE user_id = $1 AND target_user_id = $2;
+        """, user_id, target_user_id)
+
+        messages = [row['content'] for row in rows]
+        # for mes in messages:
+        #     print(mes)
+        #     print()
+        return messages
     finally:
         await conn.close()
 
@@ -779,22 +800,22 @@ class Server:
         elif role == "answer":
             await self.__connect_answer(websocket, target_user_id)
 
+# {"type": "relay_message_request", 
+# "user_id": "111", 
+# "content": {"message": "{\"type\": \"message\", \"content\": \"sbsdbvasbvwdbv\", \"sending_time\": \"{\\\"date\\\": \\\"2025-04-14\\\", \\\"time\\\": \\\"22:34:41.991804\\\"}\", \"user_id\": \"111\", \"target_user_id\": \"222\"}", "target_user": "222"}}
+
     async def __handle_relay_message_request(self, user_id: str, data: dict):
         """
         Обробляє запит relay_message_request і зберігає повідомлення в базу даних.
         """
         try:
-            message_json = data["message"]
-            target_user = data["target_user"]
-
-            message = Message.from_string(message_json)
 
             await save_message_to_db(
-                user_id=message.user_id,
-                target_user_id=message.target_user_id,
-                content=message.content
+                user_id=user_id,
+                target_user_id=data["target_user"],
+                content=data['message']
             )
-            print(f"Message from {message.user_id} to {message.target_user_id} saved to database.")
+            print(f"Message from {user_id} to {data['target_user']} saved to database.")
 
         except KeyError as e:
             print(f"Missing key in relay_message_request: {e}")

@@ -16,7 +16,7 @@ services:
   server:
     build:
       context: .
-      dockerfile: prob.Dockerfile  # Використовуємо ваш Dockerfile
+      dockerfile: prob.Dockerfile
     container_name: messenger_server
     environment:
       DATABASE_URL: postgresql://messenger_host:ilovemathanalysis@database:5432/messenger_db
