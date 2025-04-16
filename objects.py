@@ -37,15 +37,15 @@ async def save_message_to_db(user_id: str, target_user_id: str, content: str):
 async def get_messages_from_db(user_id: str, target_user_id: str):
     conn = await asyncpg.connect(DATABASE_URL)
     try:
-        rows = await conn.fetch("""
+        rows = await conn.fetch("""--sql
             SELECT content FROM messages
             WHERE user_id = $1 AND target_user_id = $2;
-        """, user_id, target_user_id)
+        """, target_user_id, user_id)
 
-        await conn.execute("""
+        await conn.execute("""--sql
             DELETE FROM messages
             WHERE user_id = $1 AND target_user_id = $2;
-        """, user_id, target_user_id)
+        """, target_user_id, user_id)
 
         messages = [row['content'] for row in rows]
         # for mes in messages:
@@ -493,12 +493,18 @@ class Connection:
 
         register_request = Request(
             request_type="register_request",
-            user_id=self.user_id
+            user_id=self.user_id,
+            content={"target_user_id": self.target_user_id}
         )
 
         await websocket.send(register_request.json_string)
         # print(f"Register request sended: {register_request}")
         self.is_connected_websocket = True
+
+        relayed_messages = await websocket.recv()
+        relayed_messages = Request.from_string(relayed_messages)
+        messages = list(map(Message.from_string, relayed_messages.content["messages"]))
+        print(messages)
 
         register_response = await websocket.recv()
         register_response = Request.from_string(register_response)
@@ -721,18 +727,26 @@ class Server:
         self.__clients[user_id].disconnect()
         print(f"User {user_id} was disconnected")
 
-    async def __handle_register_request(self, websocket, user_id: str):
+    async def __handle_register_request(self, websocket, user_id: str, data: dict):
         """Function which handles receiving and processing register_request from user"""
         client = self.__clients.setdefault(user_id, User())
         client.websocket = websocket
         client.is_online = True
 
+        target_user_id = data["target_user_id"]
+
         # Here stored messages should be sent to the user as one request
         # Messages should be ordered in some way
-
-        target_user_id = self.__clients[user_id].pending_user_id
+        stored_messages = await get_messages_from_db(user_id, target_user_id)
+        relay_messages_request = Request(
+            request_type="relay_message_request",
+            content={"messages": stored_messages}
+        )
+        await websocket.send(relay_messages_request.json_string)
 
         if self.__clients[user_id].is_pended:
+            target_user_id = self.__clients[user_id].pending_user_id
+
             connection_establishment_request = Request(
                 request_type="connection_establishment_request",
                 content={"user_id": self.__clients[user_id].pending_user_id, "role": "answer"}
@@ -837,7 +851,7 @@ class Server:
 
                 match request_type:
                     case "register_request":
-                        await self.__handle_register_request(websocket, user_id)
+                        await self.__handle_register_request(websocket, user_id, data)
                     case "connection_request":
                         await self.__handle_connection_request(websocket, user_id, data)
                     case "connect_to_request":
