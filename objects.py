@@ -1,5 +1,6 @@
 """objects for messenger.py and server.py"""
 import json
+import os
 import asyncio
 from datetime import datetime
 import uuid
@@ -21,12 +22,14 @@ SERVER_URL = "ws://0.0.0.0:8000"
 
 MESSAGE_NAMESPACE = uuid.UUID("1bc43a13-70f6-49c3-bea7-26f4fcc5b6c8")
 
-DATABASE_URL = "postgresql://messenger_host:ilovemathanalysis@localhost:5432/messenger_db"
+# DATABASE_URL = "postgresql://messenger_host:ilovemathanalysis@localhost:5432/messenger_db"
+DATABASE_URL = os.getenv("DATABASE_URL")
+
 
 async def save_message_to_db(user_id: str, target_user_id: str, content: str):
     conn = await asyncpg.connect(DATABASE_URL)
     try:
-        await conn.execute("""
+        await conn.execute("""--sql
             INSERT INTO messages (user_id, target_user_id, content)
             VALUES ($1, $2, $3);
         """, user_id, target_user_id, content)
@@ -48,9 +51,7 @@ async def get_messages_from_db(user_id: str, target_user_id: str):
         """, target_user_id, user_id)
 
         messages = [row['content'] for row in rows]
-        # for mes in messages:
-        #     print(mes)
-        #     print()
+
         return messages
     finally:
         await conn.close()
@@ -176,20 +177,12 @@ class Message:
     def __str__(self):
         return f"User {self.user_id} ({self.sending_time}): {self.content}"
 
-    # def __hash__(self):
-    #     return hash(
-    #             (self.type,
-    #             self.sending_time.json_string,
-    #             self.content, self.user_id,
-    #             self.target_user_id)
-    #             )
-
 
 class Request:
     """Class to represent request to the server or from it"""
     def __init__(self, request_type: str, user_id: str=None, content: str=None):
         self.type = request_type
-        self.user_id = user_id # id of user who sended request if server sended should be None
+        self.user_id = user_id # id of user who had sent request, if server had sent should be None
         self.content = content if content is not None else {}
 
     @property
