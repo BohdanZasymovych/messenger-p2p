@@ -13,6 +13,8 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db_init.sql:/docker-entrypoint-initdb.d/init.sql:ro  # Databese init script, creates messaegs table
+    networks:
+      - messenger_network
 
 
   server:
@@ -28,7 +30,13 @@ services:
       - "8000:8000"
     volumes:
       - .:/app
+    networks:
+      - messenger_network
 
 
 volumes:
   postgres_data:
+
+networks:
+  messenger_network:
+    external: true
