@@ -22,7 +22,6 @@ SERVER_URL = "ws://0.0.0.0:8000"
 
 MESSAGE_NAMESPACE = uuid.UUID("1bc43a13-70f6-49c3-bea7-26f4fcc5b6c8")
 
-# DATABASE_URL = "postgresql://messenger_host:ilovemathanalysis@localhost:5432/messenger_db"
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 
@@ -112,7 +111,7 @@ class Time:
             self.time = cur_time.split()[1]
 
     def __str__(self):
-        """Returns string representation of time to seconds"""
+        """Returns string representation of the time to the seconds"""
         return self.time[:8]
 
     @property
@@ -216,7 +215,6 @@ class Connection:
         self.data_channel: RTCDataChannel | None = None
         self.websocket = None
 
-        # self.connection_type = None
         self.is_connected_websocket = False
         self.is_p2p_connected = asyncio.Event()
         self.p2p_connection_state = "disconnected"
@@ -227,6 +225,8 @@ class Connection:
         self.data_channel_closing_event = asyncio.Event()
 
         self.role = None
+
+        self.received_messages_queue = asyncio.Queue()
 
         # Adds disconnect handler task to the event loop
         # __on_disconnect function will be ran each time data_channel_closing_event is being set
@@ -251,7 +251,6 @@ class Connection:
         self.peer_connection = None
         self.data_channel = None
         self.is_p2p_connected.clear()
-        # self.connection_type = None
         self.role = None
 
     async def server_disconect(self):
@@ -279,6 +278,10 @@ class Connection:
             self.local_disconnect_initialized = False
             await self.__wait_for_connection_request()
             print("Websocket was closed")
+
+    def __receive_message(self, message: Message) -> None:
+        """Adds message to the queue"""
+        self.received_messages_queue.put_nowait(message)
 
     @staticmethod
     def __set_peer_connection_events(peer_connection: RTCPeerConnection) -> None:
@@ -312,11 +315,11 @@ class Connection:
 
         @data_channel.on('message')
         def on_message(message):
+            ### RECEIVING MESSAGE
             message = Message.from_string(message)
             if message.type != "message":
                 raise ValueError("Incorrect message type.")
-            print(message)
-            # logging.debug("Message received: %s", message)
+            self.__receive_message(message)
 
         @data_channel.on('close')
         def on_close():
@@ -494,10 +497,15 @@ class Connection:
         # print(f"Register request sended: {register_request}")
         self.is_connected_websocket = True
 
+        # Receiving messages from the server
         relayed_messages = await websocket.recv()
         relayed_messages = Request.from_string(relayed_messages)
-        messages = list(map(Message.from_string, relayed_messages.content["messages"]))
-        print(messages)
+        messages = relayed_messages.content["messages"]
+        for message in messages:
+            message = Message.from_string(message)
+            if message.type != "message":
+                raise ValueError(f"Incorrect message type ({message.type}).")
+            self.__receive_message(message)
 
         register_response = await websocket.recv()
         register_response = Request.from_string(register_response)
@@ -554,6 +562,7 @@ class Connection:
     async def connect(self) -> bool:
         """Tries to connect user to the server and to other peer if not connected yet"""
         self.local_connection_initiated.set()
+        await asyncio.sleep(0.01)
 
         if self.is_p2p_connected.is_set():
             return
@@ -561,13 +570,11 @@ class Connection:
         if not self.is_connected_websocket:
             await self.connect_to_server()
 
-        await asyncio.sleep(0.05)
-
         if self.p2p_connection_state == "connecting":
             try:
                 asyncio.wait_for(self.is_p2p_connected.wait(), 10)
             except asyncio.TimeoutError:
-                print("Connection timeout in connectio.connect()")
+                print("Connection timeout in connection.connect()")
                 self.is_p2p_connected = False
                 self.p2p_connection_state = "disconnected"
 
@@ -578,20 +585,16 @@ class Chat:
     """Class to represent chat between two users"""
     P2P_CONNECTION_TIMEOUT = 10 # seconds
 
-    def __init__(self):
-        user_id, target_user_id = self.__get_id()
+    def __init__(self, user_id: str, target_user_id: str):
         self.user_id = user_id
         self.target_user_id = target_user_id
-        self.__message_queue = asyncio.Queue()
+        self.__send_message_queue = asyncio.Queue()
         self.__connection = Connection(self.user_id, self.target_user_id)
 
-    @staticmethod
-    def __get_id():
-        """Get id of user and target user"""
-        user_id = input("Enter your user ID: ").strip()
-        target_user_id = input("Enter the ID of the user you want to connect to: ").strip()
-        return user_id, target_user_id
-
+    async def __on_message_received(self):
+        while True:
+            message = await self.__connection.received_messages_queue.get()
+            print(f"{message}")
 
     async def __message_loop(self):
         """Receives messages from user and adds them to the message queue"""
@@ -599,7 +602,7 @@ class Chat:
         while True:
             message = await ainput('You: ')
             if message:
-                self.__message_queue.put_nowait(Message(
+                self.__send_message_queue.put_nowait(Message(
                                         message_type="message",
                                         content=message,
                                         sending_time=Time(),
@@ -660,7 +663,7 @@ class Chat:
     async def __send_message_loop(self):
         """If message queue is not empty gets message from it and sends it"""
         while True:
-            message = await self.__message_queue.get()
+            message = await self.__send_message_queue.get()
             await self.__send_message(message)
 
     async def __close(self):
@@ -672,11 +675,12 @@ class Chat:
     async def open(self):
         """Opens and runs chat"""
         try:
-            message_task = asyncio.create_task(self.__message_loop())
-            send_task = asyncio.create_task(self.__send_message_loop())
+            get_message_task = asyncio.create_task(self.__message_loop())
+            send_message_task = asyncio.create_task(self.__send_message_loop())
+            receive_message_task = asyncio.create_task(self.__on_message_received())
             connect_to_server_task = asyncio.create_task(self.__connection.connect_to_server())
 
-            await asyncio.gather(connect_to_server_task, message_task, send_task)
+            await asyncio.gather(connect_to_server_task, get_message_task, receive_message_task, send_message_task)
         finally:
             await self.__close()
 
@@ -739,6 +743,10 @@ class Server:
 
         if self.__clients[user_id].is_pended:
             target_user_id = self.__clients[user_id].pending_user_id
+
+            self.__clients[user_id].is_pended = False
+            self.__clients[user_id].pending_user_id = None
+            self.__clients[target_user_id].pended_user_id = None
 
             connection_establishment_request = Request(
                 request_type="connection_establishment_request",
