@@ -35,7 +35,8 @@ ICE_CONFIG = RTCConfiguration(
     iceServers=[RTCIceServer(urls=["stun:stun.l.google.com:19302"])]
 )
 
-SERVER_URL = "ws://0.0.0.0:8000"
+# SERVER_URL = "ws://0.0.0.0:8000"
+SERVER_URL = "ws://messenger_server:8000"
 
 MESSAGE_NAMESPACE = uuid.UUID("1bc43a13-70f6-49c3-bea7-26f4fcc5b6c8")
 

@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  database:
+    image: postgres:14
+    container_name: messenger_db
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER_CLIENT}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD_CLIENT}"
+      POSTGRES_DB: "${POSTGRES_DB_CLIENT}"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - messenger_network
+
+  messenger:
+    build:
+      context: .
+      dockerfile: messenger.Dockerfile
+    container_name: messenger_app
+    stdin_open: true
+    tty: true
+    environment:
+      DATABASE_URL: postgresql://messenger_user:messenger_password@database:5432/messenger_user_db
+    depends_on:
+      - database
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: python messenger.py
+    networks:
+      - messenger_network
+
+volumes:
+  postgres_data:
+
+networks:
+  messenger_network:
+    external: true
