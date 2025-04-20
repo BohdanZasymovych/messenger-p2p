@@ -22,4 +22,4 @@ COPY . .
 ENV PATH="/root/.local/bin:$PATH"
 
 # Run the application
-CMD ["python", "server.py"]
+CMD ["python", "-u", "server.py"]
