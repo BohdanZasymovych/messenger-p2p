@@ -3,5 +3,5 @@
 venv
 env
 *.log
+logs
 __pycache__
-messenger_old.py
