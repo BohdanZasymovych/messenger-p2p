@@ -20,6 +20,13 @@ from websockets.legacy.server import WebSocketServerProtocol
 
 WebSocket = Union[WebSocketClientProtocol, WebSocketServerProtocol]
 
+
+
+# Ensure folder for logs exists
+FOLDER_PATH = "./logs"
+if not os.path.exists(FOLDER_PATH):
+    os.makedirs(FOLDER_PATH)
+
 # Set up logging
 TIMESTAMP = datetime.now().strftime('%Y-%m-%d_%H-%M-%S-%f')[:-3]
 LOG_FILENAME = f"./logs/log_{TIMESTAMP}.log"
