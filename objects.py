@@ -924,13 +924,6 @@ class Server:
             request_type="share_offer_request",
             content={"user_id": target_user_id, "offer": offer}
         )
-        print(f"Target user websocket: {target_user_websocket}, target_user_id: {target_user_id}")
-
-        if hasattr(target_user_websocket, "state"):
-            print(f"State: {target_user_websocket.state}")
-
-        if hasattr(target_user_websocket, "readyState"):
-            print(f"readyState: {target_user_websocket.readyState}")
 
         await target_user_websocket.send(share_offer_request.json_string)
         print(f"Offer was sent to the target user: {share_offer_request.json_string}")
@@ -944,13 +937,6 @@ class Server:
             request_type="share_answer_request",
             content={"user_id": target_user_id, "answer": answer}
         )
-        print(f"Target user websocket: {target_user_websocket}, target_user_id: {target_user_id}")
-
-        if hasattr(target_user_websocket, "state"):
-            print(f"State: {target_user_websocket.state}")
-
-        if hasattr(target_user_websocket, "readyState"):
-            print(f"readyState: {target_user_websocket.readyState}")
 
         await target_user_websocket.send(share_answer_request.json_string)
         print(f"Answer was sent to the target user: {share_answer_request.json_string}")
