@@ -1,7 +1,0 @@
-CREATE TABLE IF NOT EXISTS messages (
-    id SERIAL PRIMARY KEY,
-    user_id VARCHAR(100) NOT NULL,
-    target_user_id VARCHAR(100) NOT NULL,
-    content TEXT NOT NULL,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);

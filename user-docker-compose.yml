@@ -14,7 +14,7 @@ services:
       - "5434:5432"
     volumes:
       - postgres_data_user:/var/lib/postgresql/data
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./db_init_user.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
       - messenger_network
 
