@@ -528,9 +528,10 @@ class Connection:
 
 class Chat:
     """Class to represent chat between two users"""
-    def __init__(self, user_id: str, target_user_id: str):
+    def __init__(self, user_id: str, target_user_id: str, on_message_callback: callable=None):
         self.user_id = user_id
         self.target_user_id = target_user_id
+        self.__on_message_callback: callable = on_message_callback
         self.__send_message_queue = asyncio.Queue()
         self.__connection = Connection(self.user_id, self.target_user_id)
         self.__encryption = Encryption()
@@ -539,7 +540,9 @@ class Chat:
         while True:
             message = await self.__connection.received_messages_queue.get()
             message = Message.from_string(message)
+            # self.__on_message_callback(message, self.target_user_id) # Function from App class
             print(message)
+
 
     async def __send_message_to_server(self, message: Message):
         relay_message_request = Request(
@@ -644,7 +647,7 @@ class App:
     async def remove_chat(self, target_user_id: str):
         """Removes chat with the target user from application"""
         if target_user_id not in self.__chats:
-            return 
+            return
 
         del self.__chats[target_user_id]
 
@@ -671,18 +674,27 @@ class App:
         return [chat["target_user_id"] for chat in chats]
 
     def send_message(self, target_user_id: str, message: str):
+        """Sends message to the target user"""
         if target_user_id in self.__chats:
             self.__chats[target_user_id].send_message(message)
         else:
             raise ValueError(f"Chat with {target_user_id} not found.")
 
-    async def __open(self):
-        # Sign up to application process
+    def on_message_received(self, message: Message, target_user_id: str):
+        """Function which is called when message is received"""
+        # Message has to be sent to the frontend
+        pass
+
+    async def open(self):
+        # Sign in / sign up to the application process
 
         # Getting and initializing chats
         target_user_ids = await self.__get_chats_from_db()
         for target_user_id in target_user_ids:
-            chat = Chat(self.user_id, target_user_id)
+            chat = Chat(
+                user_id=self.user_id,
+                target_user_id=target_user_id,
+                on_message_callback=self.on_message_received)
             self.__chats[target_user_id] = chat
 
 
