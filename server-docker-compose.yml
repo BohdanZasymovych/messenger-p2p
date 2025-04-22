@@ -14,7 +14,7 @@ services:
       - "5433:5432"
     volumes:
       - postgres_data_server:/var/lib/postgresql/data
-      - ./db_init.sql:/docker-entrypoint-initdb.d/init.sql:ro  # Databese init script, creates messages table
+      - ./db_init_server.sql:/docker-entrypoint-initdb.d/init.sql:ro  # Databese init script, creates messages table
     networks:
       - messenger_network
 

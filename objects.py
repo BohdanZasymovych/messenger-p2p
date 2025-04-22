@@ -1,11 +1,9 @@
 """objects for messenger.py and server.py"""
-import json
 import os
 import asyncio
 import logging
 from datetime import datetime
 from typing import Union
-import uuid
 from aioconsole import ainput
 from aiortc import (RTCPeerConnection,
                     RTCSessionDescription,
@@ -17,9 +15,9 @@ import asyncpg
 from websockets.legacy.client import WebSocketClientProtocol
 from websockets.legacy.server import WebSocketServerProtocol
 
+from messages_requests import Request, Message, Encryption
 
 WebSocket = Union[WebSocketClientProtocol, WebSocketServerProtocol]
-
 
 
 # Ensure folder for logs exists
@@ -42,45 +40,6 @@ ICE_CONFIG = RTCConfiguration(
     iceServers=[RTCIceServer(urls=["stun:stun.l.google.com:19302"])]
 )
 
-# SERVER_URL = "ws://0.0.0.0:8000"
-SERVER_URL = "ws://messenger_server:8000"
-
-MESSAGE_NAMESPACE = uuid.UUID("1bc43a13-70f6-49c3-bea7-26f4fcc5b6c8")
-
-DATABASE_URL = os.getenv("DATABASE_URL")
-
-
-async def save_message_to_db(user_id: str, target_user_id: str, content: str) -> None:
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
-        await conn.execute("""--sql
-            INSERT INTO messages (user_id, target_user_id, content)
-            VALUES ($1, $2, $3);
-        """, user_id, target_user_id, content)
-        print(f"Message from {user_id} to {target_user_id} saved to database.")
-    finally:
-        await conn.close()
-
-
-async def get_messages_from_db(user_id: str, target_user_id: str) -> list:
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
-        rows = await conn.fetch("""--sql
-            SELECT content FROM messages
-            WHERE user_id = $1 AND target_user_id = $2;
-        """, target_user_id, user_id)
-
-        await conn.execute("""--sql
-            DELETE FROM messages
-            WHERE user_id = $1 AND target_user_id = $2;
-        """, target_user_id, user_id)
-
-        messages = [row['content'] for row in rows]
-
-        return messages
-    finally:
-        await conn.close()
-
 
 class IncorrectRequestTypeError(Exception):
     """Exception which is raised when request with incorrect type is received"""
@@ -98,17 +57,15 @@ class User:
     """Class that represents user on the server side"""
     def __init__(self, websocket=None):
         self.is_online = False # Indicates if user is connected to the server
+        self.websocket = websocket
+
         self.role = None
+
         self.is_pended = False # Indicates if someone is waiting for user
         self.pending_user_id = None # User waiting for you
         self.pended_user_id = None # User you are waiting for
-        self.connection_type = None
-        self.websocket = websocket
-        self.message_queue = asyncio.Queue()
 
-    def add_message(self, message: 'Message'):
-        """Adds message to the queue"""
-        self.message_queue.put_nowait(message.json_string)
+        self.public_key = None
 
     def disconnect(self):
         """Sets user to default disconnected state"""
@@ -117,128 +74,18 @@ class User:
         self.is_pended = False
         self.pending_user_id = None
         self.pended_user_id = None
-        self.connection_type = None
         self.websocket = None
-    
+        self.public_key = None
+
     def __repr__(self):
         return (f"User(is_online={self.is_online}, role={self.role!r}, is_pended={self.is_pended}, "
-                f"pending_user_id={self.pending_user_id!r}, pended_user_id={self.pended_user_id!r}, "
-                f"connection_type={self.connection_type!r})")
-
-
-class Time:
-    """Class to represent time"""
-    def __init__(self, empty: bool=False):
-        """
-        Initializes time object with current time if empty parameter is False,
-        or empty time object otherwise
-        """
-        if empty:
-            self.date = None
-            self.time = None
-        else:
-            cur_time =  datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
-            self.date = cur_time.split()[0]
-            self.time = cur_time.split()[1]
-
-    def __str__(self):
-        """Returns string representation of the time to the seconds"""
-        return self.time[:8]
-
-    @property
-    def json_string(self):
-        """Returns json string representing time object"""
-        return json.dumps(
-            {"date": self.date, "time": self.time}
-        )
-
-    @classmethod
-    def from_string(cls, json_string: str) -> 'Time':
-        """Creates time object from json string"""
-        time_obj = Time(empty=True)
-        time_dict = json.loads(json_string)
-        time_obj.date = time_dict["date"]
-        time_obj.time = time_dict["time"]
-        return time_obj
-
-
-class Message:
-    """Class to represent message exchanged between users"""
-    def __init__(self, message_type: str, content: str, sending_time: Time,
-                 user_id: str, target_user_id: str):
-
-        self.type = message_type
-        self.content = content
-        self.sending_time = sending_time
-        self.user_id = user_id
-        self.target_user_id = target_user_id
-
-    @property
-    def json_string(self):
-        """Converts message object to json string"""
-        return json.dumps(
-            {"type": self.type,
-            "content": self.content,
-            "sending_time": self.sending_time.json_string,
-            "user_id": self.user_id,
-            "target_user_id": self.target_user_id
-            })
-
-    @classmethod
-    def from_string(cls, json_string: str) -> 'Message':
-        """Creates message object from json string"""
-        data = json.loads(json_string)
-        return Message(
-            message_type=data['type'],
-            content=data['content'],
-            sending_time=Time.from_string(data['sending_time']),
-            user_id=data['user_id'],
-            target_user_id=data['target_user_id']
-        )
-
-    @property
-    def unique_id(self):
-        """Returns unique id of the message based on hash"""
-        message_info = f"""{self.content}|{self.sending_time.date}
-|{self.sending_time.time}|{self.user_id}|{self.target_user_id}"""
-
-        return str(uuid.uuid5(MESSAGE_NAMESPACE, message_info))
-
-    def __str__(self):
-        return f"User {self.user_id} ({self.sending_time}): {self.content}"
-
-
-class Request:
-    """Class to represent request to the server or from it"""
-    def __init__(self, request_type: str, user_id: str=None, content: dict=None):
-        self.type: str = request_type
-        self.user_id: str = user_id # id of user who had sent request, if server had sent should be None
-        self.content: dict = content if content is not None else {}
-
-    @property
-    def json_string(self) -> str:
-        """Converts request object to json string"""
-        return json.dumps(
-            {"type": self.type, "user_id": self.user_id, "content": self.content}
-            )
-
-    @classmethod
-    def from_string(cls, json_string: str) -> 'Request':
-        """Creates request object from json string"""
-        data = json.loads(json_string)
-        return Request(
-            request_type=data["type"],
-            user_id=data["user_id"],
-            content=data["content"]
-        )
-
-    def __str__(self) -> str:
-        """Returns string representation of the request"""
-        return self.json_string
+                f"pending_user_id={self.pending_user_id!r}, pended_user_id={self.pended_user_id!r}")
 
 
 class Connection:
     """Class to represent connection between to users"""
+    SERVER_URL = "ws://messenger_server:8000"
+
     def __init__(self, user_id: str, target_user_id: str):
         self.user_id: str = user_id
         self.target_user_id: str = target_user_id
@@ -247,7 +94,7 @@ class Connection:
         self.data_channel: RTCDataChannel | None = None
         self.websocket: WebSocket | None = None
 
-        self.connection_type: str = "disconnected"
+        # self.connection_type: str = "disconnected"
         self.is_connected_websocket: bool = False
         self.is_p2p_connected: asyncio.Event = asyncio.Event()
         self.p2p_connection_state: str = "disconnected"
@@ -291,7 +138,7 @@ class Connection:
         self.is_p2p_connected.clear()
         self.local_connection_initiated.clear()
         self.p2p_connection_state = "disconnected"
-        self.connection_type = "disconnected"
+        # self.connection_type = "disconnected"
         self.peer_connection = None
         self.data_channel = None
         self.is_p2p_connected.clear()
@@ -325,7 +172,6 @@ class Connection:
 
             self.local_disconnect_initialized = False
             self.is_target_user_online = None
-            print("Websocket was closed")
 
     def __receive_message(self, message: str) -> None:
         """Adds message received as json string to the queue"""
@@ -473,41 +319,6 @@ class Connection:
 
         return True # Connection successful
 
-    async def __establish_server_connection(self) -> None:
-        """
-        Function which establishes connection to the server
-        by sending server_connection_request
-        and waiting for it from another peer
-        """
-        await self.__update_target_user_status()
-        if self.is_target_user_online is False:
-            self.connection_type = "disconnected"
-            return False
-
-        server_connection_request = Request(
-            request_type="server_connection_request",
-            user_id=self.user_id,
-            content={"target_user_id": self.target_user_id}
-        )
-        server_connection_response = asyncio.Future()
-        self.futures["server_connection_request"] = server_connection_response
-        await self.websocket.send(server_connection_request.json_string)
-
-        try:
-            server_connection_response = await asyncio.wait_for(server_connection_response, 12)
-        except asyncio.TimeoutError:
-            self.connection_type = "disconnected"
-            return False # Connection failed
-
-        del self.futures["server_connection_request"]
-
-        # server_connection_response = Request.from_string(server_connection_response)
-        if server_connection_response.type == "server_connection_request":
-            self.connection_type = "server_connection"
-            return True
-
-        raise IncorrectRequestTypeError("Incorrect response to server connection request")
-
     async def __establish_p2p_connection(self) -> bool:
         """Runs connect function depending on user's role"""
         self.p2p_connection_state = "connecting"
@@ -525,11 +336,8 @@ class Connection:
         if is_p2p_connected:
             self.is_p2p_connected.set()
             self.p2p_connection_state = "connected"
-            self.connection_type = "p2p_connection"
+            # self.connection_type = "p2p_connection"
             self.is_target_user_online = True
-        else:
-            self.is_p2p_connection_failed = True
-            await self.__establish_server_connection()
 
         return is_p2p_connected
 
@@ -617,14 +425,13 @@ class Connection:
         print(f"Target user status response received: {target_user_status_response}")
         self.is_target_user_online = target_user_status_response.content["target_user_status"]
 
-
     async def connect_to_server(self):
         """
         Connects user to the server by sending register_request
         and waits in case connection request received
         """
         if self.websocket is None:
-            websocket = await websockets.connect(SERVER_URL)
+            websocket = await websockets.connect(self.SERVER_URL)
             self.websocket = websocket
             self.is_connected_websocket = True
             self.__handle_server_requests_task = asyncio.create_task(self.__handle_server_requests())
@@ -682,15 +489,16 @@ class Connection:
         self.role = connection_response.content["role"]
 
         is_p2p_connected = await self.__establish_p2p_connection()
-
+        
         if is_p2p_connected:
             self.is_p2p_connected.set()
             self.p2p_connection_state = "connected"
             self.is_p2p_connection_failed = False
             return True # Connected successfully
 
-        self.p2p_connection_state = "disconnected"
         self.is_p2p_connection_failed = True
+        self.p2p_connection_state = "disconnected"
+        # await self.__establish_server_connection()
         return False # Connection failed
 
     async def connect(self) -> bool:
@@ -698,14 +506,14 @@ class Connection:
         self.local_connection_initiated.set()
         await asyncio.sleep(0.01)
 
-        if self.is_p2p_connected.is_set():
+        if self.is_p2p_connected.is_set() or self.is_p2p_connection_failed:
             return
 
         if not self.is_connected_websocket:
             await self.connect_to_server()
 
-        if self.connection_type == "server_connection":
-            return
+        # if self.connection_type == "server_connection":
+        #     return
 
         if self.p2p_connection_state == "connecting":
             try:
@@ -725,26 +533,13 @@ class Chat:
         self.target_user_id = target_user_id
         self.__send_message_queue = asyncio.Queue()
         self.__connection = Connection(self.user_id, self.target_user_id)
+        self.__encryption = Encryption()
 
     async def __on_message_received(self):
         while True:
             message = await self.__connection.received_messages_queue.get()
             message = Message.from_string(message)
             print(message)
-
-    async def __message_loop(self):
-        """Receives messages from user and adds them to the message queue"""
-        print()
-        while True:
-            message = await ainput('You: ')
-            if message:
-                self.__send_message_queue.put_nowait(Message(
-                                        message_type="message",
-                                        content=message,
-                                        sending_time=Time(),
-                                        user_id=self.user_id,
-                                        target_user_id=self.target_user_id
-                                        ))
 
     async def __send_message_to_server(self, message: Message):
         relay_message_request = Request(
@@ -755,7 +550,7 @@ class Chat:
         await self.__connection.websocket.send(relay_message_request.json_string)
         print("Message was sent to the server")
 
-    async def __send_message(self, message: Message):
+    async def __send_message_to_peer(self, message: Message):
         """
         Connects to other peer.
         If connection is already active or connection was successful
@@ -763,14 +558,10 @@ class Chat:
         """
         connection = self.__connection
 
-        if connection.connection_type == "disconnected" and not connection.is_p2p_connection_failed:
-            await connection.connect()
+        # Ensure connection is established
+        await connection.connect()
 
-        if connection.is_p2p_connection_failed:
-            await self.__send_message_to_server(message)
-            return
-
-        if connection.connection_type in ("disconnected", "server_connection"):
+        if not connection.is_target_user_online or connection.is_p2p_connection_failed:
             await self.__send_message_to_server(message)
             return
 
@@ -784,7 +575,7 @@ class Chat:
         """If message queue is not empty gets message from it and sends it"""
         while True:
             message = await self.__send_message_queue.get()
-            await self.__send_message(message)
+            await self.__send_message_to_peer(message)
 
     async def __close(self):
         """Closes chat and disconnects user"""
@@ -804,13 +595,137 @@ class Chat:
         finally:
             await self.__close()
 
+    async def __message_loop(self):
+        """Receives messages from user and adds them to the message queue"""
+        print()
+        while True:
+            message = await ainput('You: ')
+            if message:
+                self.__send_message_queue.put_nowait(Message(
+                                    message_type="message",
+                                    content=message,
+                                    user_id=self.user_id,
+                                    target_user_id=self.target_user_id
+                                    ))
+
+    def send_message(self, message: str):
+        """Sends message to the target user"""
+        self.__send_message_queue.put_nowait(Message(
+                                        message_type="message",
+                                        content=message,
+                                        user_id=self.user_id,
+                                        target_user_id=self.target_user_id
+                                        ))
+
+
+class App:
+    """Class representing messenger application"""
+    DATABASE_URL = os.getenv("DATABASE_URL_USER")
+
+    def __init__(self):
+        self.user_id: str | None = None
+        self.__chats = {} # user_id: Chat
+
+    async def add_chat(self, target_user_id: str):
+        """Adds chat with the target user to application"""
+        self.__chats[target_user_id] = Chat(self.user_id, target_user_id)
+
+        # add chat to the database
+        conn = await asyncpg.connect(self.DATABASE_URL)
+        try:
+            await conn.execute("""--sql
+                INSERT INTO chats (target_user_id)
+                VALUES ($1)
+                ON CONFLICT (target_user_id) DO NOTHING;
+                """, target_user_id)
+        finally:
+            await conn.close()
+
+    async def remove_chat(self, target_user_id: str):
+        """Removes chat with the target user from application"""
+        if target_user_id not in self.__chats:
+            return 
+
+        del self.__chats[target_user_id]
+
+        # remove chat from the database
+        conn = await asyncpg.connect(self.DATABASE_URL)
+        try:
+            await conn.execute("""--sql
+                DELETE FROM chats WHERE target_user_id = $1;
+                """, target_user_id)
+        finally:
+            await conn.close()
+
+    async def __get_chats_from_db(self) -> list[str]:
+        """Gets chats from database"""
+        conn = await asyncpg.connect(self.DATABASE_URL)
+
+        try:
+            chats = await conn.fetch("""--sql
+                SELECT * FROM chats;
+                """)
+        finally:
+            await conn.close()
+
+        return [chat["target_user_id"] for chat in chats]
+
+    def send_message(self, target_user_id: str, message: str):
+        if target_user_id in self.__chats:
+            self.__chats[target_user_id].send_message(message)
+        else:
+            raise ValueError(f"Chat with {target_user_id} not found.")
+
+    async def __open(self):
+        # Sign up to application process
+
+        # Getting and initializing chats
+        target_user_ids = await self.__get_chats_from_db()
+        for target_user_id in target_user_ids:
+            chat = Chat(self.user_id, target_user_id)
+            self.__chats[target_user_id] = chat
+
 
 class Server:
     """Class to represent server which handles establishing connection between users"""
+    SERVER_DATABASE_URL = os.getenv("DATABASE_URL_SERVER")
+
     def __init__(self, ip: str, port: int):
-        self.ip = ip
-        self.port = port
+        self.ip: str = ip
+        self.port: int = port
         self.__clients: dict[User] = {'1': User(), '2': User()} # user_id: User
+
+    async def __save_message_to_db(self, user_id: str, target_user_id: str, message: str) -> None:
+        """Saves message to the database"""
+        conn = await asyncpg.connect(self.SERVER_DATABASE_URL)
+        try:
+            await conn.execute("""--sql
+                INSERT INTO messages (user_id, target_user_id, message)
+                VALUES ($1, $2, $3);
+            """, user_id, target_user_id, message)
+        finally:
+            await conn.close()
+        print(f"Message from {user_id} to {target_user_id} saved to database.")
+
+    async def __get_messages_from_db(self, user_id: str, target_user_id: str) -> list:
+        """Gets messages to specified user from the database"""
+        conn = await asyncpg.connect(self.SERVER_DATABASE_URL)
+        try:
+            rows = await conn.fetch("""--sql
+                SELECT message FROM messages
+                WHERE user_id = $1 AND target_user_id = $2;
+            """, target_user_id, user_id)
+
+            await conn.execute("""--sql
+                DELETE FROM messages
+                WHERE user_id = $1 AND target_user_id = $2;
+            """, target_user_id, user_id)
+
+            messages = [row["message"] for row in rows]
+
+            return messages
+        finally:
+            await conn.close()
 
     def __disconnect_user(self, user_id: str):
         """Disconnect user with given user id"""
@@ -835,7 +750,7 @@ class Server:
         target_user_id = data["target_user_id"]
 
         # Stored messages are sent to the user as one relay_message_request
-        stored_messages = await get_messages_from_db(user_id, target_user_id)
+        stored_messages = await self.__get_messages_from_db(user_id, target_user_id)
         for message in stored_messages:
             # message = Message.from_string(message)
             relay_message_request = Request(
@@ -966,10 +881,10 @@ class Server:
 
         else:
             try:
-                await save_message_to_db(
+                await self.__save_message_to_db(
                     user_id=user_id,
                     target_user_id=target_user_id,
-                    content=data["message"]
+                    message=data["message"]
                 )
                 print(f"Message from {user_id} to {data['target_user']} saved to database.")
 
@@ -998,46 +913,65 @@ class Server:
         await websocket.send(target_user_status_request.json_string)
         print(f"Target user status request sent: {target_user_status_request.json_string}")
 
-    async def __websocket_handler(self, websocket):
-        print("New client connected.")
+    async def __handle_key_exchange_request(self, data: dict):
+        pass
+
+    async def __receive_requests(self, websocket: WebSocket, requests_queue: asyncio.Queue):
+        """Function which receives requests from user and adds them to the requests queue"""
+        user_id = None
         try:
             async for request in websocket:
+                print(f"Request received: {request}")
                 request = Request.from_string(request)
-                print(f"Request: {request.json_string}\n")
-                request_type = request.type
                 user_id = request.user_id
-                data = request.content
-
-                match request_type:
-                    case "register_request":
-                        await self.__handle_register_request(websocket, user_id, data)
-                    case "connection_request":
-                        await self.__handle_connection_request(websocket, user_id, data)
-                    case "share_offer_request":
-                        await self.__handle_share_offer_request(data)
-                    case "share_answer_request":
-                        await self.__handle_share_answer_request(data)
-                    case "server_connection_request":
-                        await self.__handle_server_connection_request(data)
-                    case "relay_message_request":
-                        await self.__handle_relay_message_request(user_id, data)
-                    case "get_target_user_status_request":
-                        await self.__handle_get_target_user_status_request(user_id, data)
-                    # case "ping_request":
-                    #     print("Ping request received")
-                    #     pong_response = Request(
-                    #         request_type="ping_request",
-                    #         content={}
-                    #     )
-                    #     await websocket.send(pong_response.json_string)
-                    case _:
-                        raise IncorrectRequestTypeError(f"Incorrect request type in __websocket_handler ({request_type}).")
-
+                requests_queue.put_nowait(request)
         except websockets.exceptions.ConnectionClosed:
             print(f"Connection closed for user: {user_id}")
+        except asyncio.CancelledError:
+            print("Handler task was cancelled")
+            return
         finally:
-            self.__disconnect_user(user_id)
+            if user_id is not None:
+                self.__disconnect_user(user_id)
+
             await websocket.close()
+
+    async def __websocket_handler(self, websocket):
+        print("New client connected.")
+        requests_queue = asyncio.Queue()
+        asyncio.create_task(self.__receive_requests(websocket, requests_queue))
+        while True:
+            request = await requests_queue.get()
+            request_type = request.type
+            user_id = request.user_id
+            data = request.content
+
+            match request_type:
+                case "register_request":
+                    await self.__handle_register_request(websocket, user_id, data)
+                case "connection_request":
+                    await self.__handle_connection_request(websocket, user_id, data)
+                case "share_offer_request":
+                    await self.__handle_share_offer_request(data)
+                case "share_answer_request":
+                    await self.__handle_share_answer_request(data)
+                case "server_connection_request":
+                    await self.__handle_server_connection_request(data)
+                case "relay_message_request":
+                    await self.__handle_relay_message_request(user_id, data)
+                case "get_target_user_status_request":
+                    await self.__handle_get_target_user_status_request(user_id, data)
+                case "key_exchange_request":
+                    pass
+                # case "ping_request":
+                #     print("Ping request received")
+                #     pong_response = Request(
+                #         request_type="ping_request",
+                #         content={}
+                #     )
+                #     await websocket.send(pong_response.json_string)
+                case _:
+                    raise IncorrectRequestTypeError(f"Incorrect request type in __websocket_handler ({request_type}).")
 
     async def run(self):
         """Runs websocket server"""
