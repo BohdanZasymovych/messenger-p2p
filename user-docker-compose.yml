@@ -1,11 +1,11 @@
-version: '3.8'
+# version: '3.8'
 
 services:
   user_database:
     image: postgres:14
     container_name: messenger_user_db
-    env_file:
-      - .env
+    # env_file:
+    #   - .env
     environment:
       POSTGRES_USER: "${POSTGRES_USER_CLIENT}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD_CLIENT}"
@@ -13,7 +13,7 @@ services:
     ports:
       - "5434:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data_user:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
       - messenger_network
@@ -23,8 +23,8 @@ services:
       context: .
       dockerfile: messenger.Dockerfile
     container_name: messenger_app
-    env_file:
-      - .env
+    # env_file:
+    #   - .env
     stdin_open: true
     tty: true
     environment:
@@ -39,7 +39,7 @@ services:
       - messenger_network
 
 volumes:
-  postgres_data:
+  postgres_data_user:
 
 networks:
   messenger_network:
