@@ -1,0 +1,83 @@
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    font-family: sans-serif;
+  }
+  
+  #map {
+    height: 100%;
+    width: 100%;
+  }
+  
+  .home-button {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    padding: 10px 15px;
+    background: #0057b7;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    font-size: 16px;
+    cursor: pointer;
+    z-index: 9999;
+  }
+  
+  .search-container {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    background: white;
+    padding: 6px 10px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  
+  .search-container input {
+    border: none;
+    padding: 6px;
+    border-radius: 4px;
+    width: 250px;
+    outline: none;
+  }
+  
+  .search-container button {
+    padding: 6px 10px;
+    border: none;
+    background: #007bff;
+    color: white;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  
+  .map-buttons {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .map-buttons button {
+    background: white;
+    border: none;
+    padding: 10px;
+    border-radius: 50%;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+    cursor: pointer;
+    width: 50px;
+    height: 50px;
+    font-size: 20px;
+  }
+  
+  .map-buttons button:hover {
+    background-color: #eee;
+  }
