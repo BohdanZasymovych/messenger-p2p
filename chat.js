@@ -1,61 +1,91 @@
+let userId = prompt("Enter your user ID:");
+let currentTargetUserId = null;
+
+async function createChat() {
+  const targetUserId = document.getElementById("newChatUserId").value.trim();
+  if (!targetUserId) return;
+
+  const res = await fetch("http://127.0.0.1:8000/add_chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_id: userId, target_user_id: targetUserId })
+  });
+
+  if (res.ok) {
+    addChatToUI(targetUserId);
+    document.getElementById("newChatUserId").value = "";
+  } else {
+    const err = await res.json();
+    alert("❌ " + err.detail);
+  }
+}
+
+function addChatToUI(targetUserId) {
+  const li = document.createElement("li");
+  li.textContent = targetUserId;
+  li.onclick = () => openChat(targetUserId);
+  document.getElementById("chatList").appendChild(li);
+}
+
+async function openChat(targetUserId) {
+  currentTargetUserId = targetUserId;
+  document.getElementById("chatWith").textContent = targetUserId;
+  document.getElementById("messages").innerHTML = "";
+
+  const res = await fetch(`http://127.0.0.1:8000/get_messages/${userId}/${targetUserId}`);
+  const messages = await res.json();
+
+  messages.forEach(msg => {
+    const bubble = document.createElement("div");
+    bubble.classList.add("message", msg.sender === "me" ? "sent" : "received");
+    bubble.textContent = msg.text;
+    document.getElementById("messages").appendChild(bubble);
+  });
+}
+
 async function sendMessage() {
-  const input = document.getElementById('messageInput');
+  const input = document.getElementById("messageInput");
   const messageText = input.value.trim();
-  if (!messageText) return;
+  if (!messageText || !currentTargetUserId) return;
 
-  // Display the message immediately in UI
-  const messageBubble = document.createElement('div');
-  messageBubble.classList.add('message', 'sent');
-  messageBubble.textContent = messageText;
-  document.getElementById('messages').appendChild(messageBubble);
-
-  // Send to backend
-  const response = await fetch("http://127.0.0.1:8000/messages", {
+  const res = await fetch("http://127.0.0.1:8000/send_message", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      sender: "me",
+      user_id: userId,
+      target_user_id: currentTargetUserId,
       text: messageText,
       timestamp: new Date().toISOString()
     })
   });
 
-  if (response.ok) {
-    console.log("✅ Message sent successfully");
-  } else {
-    console.error("❌ Failed to send message:", await response.text());
+  if (res.ok) {
+    const bubble = document.createElement("div");
+    bubble.classList.add("message", "sent");
+    bubble.textContent = messageText;
+    document.getElementById("messages").appendChild(bubble);
+    input.value = "";
   }
-
-  input.value = '';
 }
 
-// Handles Enter key in input box
 function handleKeyPress(event) {
-  if (event.key === 'Enter') {
-    sendMessage();
-  }
+  if (event.key === "Enter") sendMessage();
 }
 
-// Loads all messages from backend
-async function loadMessages() {
-  try {
-    const res = await fetch("http://127.0.0.1:8000/messages");
-    const data = await res.json();
-    const container = document.getElementById('messages');
-    container.innerHTML = "";
-
-    for (const [sender, messages] of Object.entries(data)) {
-      messages.forEach(msg => {
-        const bubble = document.createElement('div');
-        bubble.classList.add('message', sender === "me" ? 'sent' : 'received');
-        bubble.textContent = msg.text;
-        container.appendChild(bubble);
-      });
-    }
-  } catch (error) {
-    console.error("❌ Failed to load messages:", error);
-  }
+async function loadChats() {
+  const res = await fetch(`http://127.0.0.1:8000/get_chats/${userId}`);
+  const chats = await res.json();
+  chats.forEach(addChatToUI);
 }
 
-// Load messages when page loads
-window.onload = loadMessages;
+window.onload = loadChats;
+async function loadRegisteredUsers() {
+  const res = await fetch("http://127.0.0.1:8000/users");
+  const users = await res.json();
+  console.log("Registered users:", users);  // 👉 можна потім показати в UI
+}
+
+window.onload = async () => {
+  await loadChats();
+  await loadRegisteredUsers();
+};
