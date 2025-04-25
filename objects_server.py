@@ -4,6 +4,7 @@ import asyncio
 from typing import Union
 import websockets
 import asyncpg
+import bcrypt
 from websockets.legacy.client import WebSocketClientProtocol
 from websockets.legacy.server import WebSocketServerProtocol
 
@@ -78,47 +79,147 @@ class Server:
         finally:
             await conn.close()
 
-    async def __save_key_to_db(self, user_id: str, public_key: str) -> None:
-        """Saves public key to the database"""
-        print(f"Saving public key for {user_id} to database...")
-        conn = await asyncpg.connect(self.SERVER_DATABASE_URL)
-        try:
-            await conn.execute("""--sql
-                INSERT INTO public_keys (user_id, public_key)
-                VALUES ($1, $2)
-                ON CONFLICT (user_id)
-                DO UPDATE SET
-                    public_key = EXCLUDED.public_key,
-                    timestamp = CURRENT_TIMESTAMP;
-            """, user_id, public_key)
-        finally:
-            await conn.close()
-        print(f"Public key for {user_id} saved to database.")
+    # async def __add_user_to_db(self, username: str, email: str, password: str) -> None:
+    #     """
+    #     Adds user to the database with hashed password, if this user is not already in the database.
+    #     """
+    #     conn = await asyncpg.connect(self.SERVER_DATABASE_URL)
+    #     try:
+    #         hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
-    async def __get_key_from_db(self, user_id: str) -> str:
-        """Gets public key from the database"""
-        print(f"Getting public key of user: {user_id} from database...")
+    #         await conn.execute("""--sql
+    #             INSERT INTO users (username, email, password)
+    #             VALUES ($1, $2, $3);
+    #         """, username, email, hashed_password)
+
+    #     finally:
+    #         await conn.close()
+
+    #     print(f"User {username} with email {email} added to database with hashed password.")
+
+    # async def __add_user_to_db(self, username: str, email: str, password: str) -> bool:
+    #     """
+    #     Adds user to the database with hashed password, if user with given username or email doesn't exist.
+    #     Returns True if user was added, False if already exists.
+    #     """
+    #     print(f"📥 Checking if user {username} or email {email} already exists...")
+
+    #     conn = await asyncpg.connect(self.SERVER_DATABASE_URL)
+    #     try:
+    #         existing_user = await conn.fetchrow("""
+    #             SELECT id FROM users WHERE username = $1 OR email = $2;
+    #         """, username, email)
+
+    #         if existing_user:
+    #             print("⚠️ User already exists. Skipping insert.")
+    #             return False  # 👈 користувач вже є
+
+    #         hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    #         print(f"🔐 Password hashed: {hashed_password}")
+
+    #         await conn.execute("""
+    #             INSERT INTO users (username, email, password)
+    #             VALUES ($1, $2, $3);
+    #         """, username, email, hashed_password)
+
+    #         print(f"✅ New user {username} inserted into DB.")
+    #         return True
+
+    #     except Exception as e:
+    #         print(f"❌ Error inserting user into DB: {e}")
+    #         return False
+
+    #     finally:
+    #         await conn.close()
+
+    async def __add_user_to_db(self, username: str, email: str, password: str) -> bool:
+        """
+        Adds user to the database with hashed password, if user with given username or email doesn't exist.
+        Returns True if user was added, False if already exists or error occurred.
+        """
+        print(f"📥 Checking if user {username} or email {email} already exists...")
+
+        try:
+            conn = await asyncpg.connect(self.SERVER_DATABASE_URL)
+            print("🔌 Connected to DB")
+
+            try:
+                existing_user = await conn.fetchrow("""
+                    SELECT id FROM users WHERE username = $1 OR email = $2;
+                """, username, email)
+                print("📊 Existing user check complete.")
+            except Exception as e:
+                print(f"❌ Error checking for existing user: {e}")
+                return False
+
+            if existing_user:
+                print("⚠️ User already exists.")
+                return False
+
+            try:
+                print("🔐 Hashing password...")
+                hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                print("💾 Password hashed, inserting user...")
+
+                await conn.execute("""
+                    INSERT INTO users (username, email, password)
+                    VALUES ($1, $2, $3);
+                """, username, email, hashed_password)
+
+                print(f"✅ New user {username} inserted into DB.")
+                return True
+
+            except Exception as e:
+                print(f"❌ Error inserting user into DB: {e}")
+                return False
+
+            finally:
+                await conn.close()
+                print("🔒 DB connection closed.")
+
+        except Exception as conn_err:
+            print(f"❌ Failed to connect to DB: {conn_err}")
+            return False
+
+    async def __get_user_info_from_db(self, username: str, email: str, password: str) -> list:
+        """
+        Gets user info by username and email and verifies the password.
+        Returns a dictionary with username, email, and password if credentials are valid.
+        """
         conn = await asyncpg.connect(self.SERVER_DATABASE_URL)
         try:
             row = await conn.fetchrow("""--sql
-                SELECT public_key FROM public_keys
-                WHERE user_id = $1;
-            """, user_id)
+                SELECT username, email, password
+                FROM users
+                WHERE username = $1 AND email = $2;
+            """, username, email)
 
             if row is None:
-                return None
+                return {}
 
-            print(f"Public key of user: {user_id} received from database.")
-            return row["public_key"]
+            hashed_password = row["password"]
+            if bcrypt.checkpw(password.encode('utf-8'), hashed_password.encode('utf-8')):
+                return {
+                    "username": row["username"],
+                    "email": row["email"],
+                    "password": hashed_password  # optionally include or skip
+                }
+
+            return {}  # Password doesn't match
+
         finally:
             await conn.close()
 
     def __disconnect_user(self, user_id: str):
         """Disconnect user with given user id"""
         disconnected_user = self.__clients[user_id]
+        if disconnected_user.pended_user_id:
+            self.__clients[disconnected_user.pended_user_id].is_pended = False
+            self.__clients[disconnected_user.pended_user_id].pending_user_id = None
 
-        for pended_user_id in disconnected_user.pended_users:
-            self.__clients[pended_user_id].pending_users.discard(user_id)
+            # Here messages which were not sent to the target user
+            # should be received from user as one request
+            # and stored in the database
 
         self.__clients[user_id].disconnect()
         print(f"User {user_id} was disconnected")
@@ -128,28 +229,30 @@ class Server:
         client = self.__clients.setdefault(user_id, User())
         client.websocket = websocket
         client.is_online = True
-        client = self.__clients[user_id]
-        client.public_key = data["public_key"]
 
         target_user_id = data["target_user_id"]
 
         # Stored messages are sent to the user as one relay_message_request
         stored_messages = await self.__get_messages_from_db(user_id, target_user_id)
+        for message in stored_messages:
+            # message = Message.from_string(message)
+            relay_message_request = Request(
+                request_type="relay_message_request",
+                content={"message": message}
+            )
+            await websocket.send(relay_message_request.json_string)
 
-        send_stored_messages = Request(
-            request_type="send_stored_messages",
-            content={"message": stored_messages}
-        )
-        await websocket.send(send_stored_messages.json_string)
+        if self.__clients[user_id].is_pended:
+            target_user_id = self.__clients[user_id].pending_user_id
 
-        if target_user_id in self.__clients[user_id].pending_users:
-            self.__clients[user_id].pending_users.discard(target_user_id)
-            self.__clients[target_user_id].pended_users.discard(user_id)
+            self.__clients[user_id].is_pended = False
+            self.__clients[user_id].pending_user_id = None
+            self.__clients[target_user_id].pended_user_id = None
 
             register_response = Request(
                 request_type="register_response",
                 content={"register_response_type": "connection_establishment_request",
-                        "user_id": target_user_id, "role": "answer", "public_key": self.__clients[target_user_id].public_key}
+                        "user_id": self.__clients[user_id].pending_user_id, "role": "answer"}
             )
             await websocket.send(register_response.json_string)
             print(f"Connection establishment request sent: {register_response.json_string}")
@@ -166,8 +269,7 @@ class Server:
         elif self.__clients[target_user_id].is_online:
             register_response = Request(
                 request_type="register_response",
-                content = {"register_response_type": "target_user_online",
-                        "public_key": self.__clients[target_user_id].public_key}
+                content = {"register_response_type": "target_user_online"}
             )
             await websocket.send(register_response.json_string)
 
@@ -192,7 +294,7 @@ class Server:
         elif self.__clients[target_user_id].is_online:
             connection_establishment_request = Request(
                 request_type="connection_establishment_request",
-                content={"user_id": user_id, "role": "answer", "public_key": self.__clients[user_id].public_key}
+                content={"user_id": user_id, "role": "answer"}
             )
 
             await self.__clients[target_user_id].websocket.send(connection_establishment_request.json_string)
@@ -201,7 +303,7 @@ class Server:
 
             connection_response = Request(
                 request_type="connection_response",
-                content={"connection_response_type": "connection_establishment_request", "role": "offer", "public_key": self.__clients[target_user_id].public_key}
+                content={"connection_response_type": "connection_establishment_request", "role": "offer"}
             )
             await websocket.send(connection_response.json_string)
             print(f"Connection establishment request sent to offerer: {connection_response}")
@@ -209,8 +311,8 @@ class Server:
 
         else:
             self.__clients[target_user_id].is_pended = True
-            self.__clients[target_user_id].pending_users.add(user_id)
-            self.__clients[user_id].pended_users.add(target_user_id)
+            self.__clients[target_user_id].pending_user_id = user_id
+            self.__clients[user_id].pended_user_id = target_user_id
 
             connection_response = Request(
                 request_type="connection_response",
@@ -255,7 +357,7 @@ class Server:
             target_user_websocket = self.__clients[target_user_id].websocket
             relay_message_request = Request(
                 request_type="relay_message_request",
-                content={"message": data["message"], "public_key": data["public_key"]}
+                content={"message": [data["message"]]}
                 )
             await target_user_websocket.send(relay_message_request.json_string)
             print(f"Message from {user_id} to {target_user_id} was relayed.")
@@ -294,34 +396,69 @@ class Server:
         await websocket.send(target_user_status_request.json_string)
         print(f"Target user status request sent: {target_user_status_request.json_string}")
 
-    async def __handle_send_long_term_public_key_request(self, user_id: str, data: dict):
-        """Saves long term public key to the database"""
-        public_key = data["long_term_public_key"]
-        await self.__save_key_to_db(user_id, public_key)
+    async def __handle_add_user_to_db_request(self, websocket, data: dict):
+        print("🟡 Entered __handle_add_user_to_db_request")  # 👈 Додаємо лог
 
-    async def __handle_get_long_term_public_key_request(self, websocket, data: dict):
-        """Gets long term public key from the database"""
-        target_user_id = data["target_user_id"]
-        public_key = await self.__get_key_from_db(target_user_id)
-        if public_key is None:
-            raise UserNotRegisteredError("Target user is not registered on the server.")
-        get_long_term_public_key_request = Request(
-            request_type="get_long_term_public_key_response",
-            content={"long_term_public_key": public_key}
-        )
-        print(f"Long term public key request sent: {get_long_term_public_key_request.json_string}")
-        await websocket.send(get_long_term_public_key_request.json_string)
+        username = data.get("username")
+        email = data.get("email")
+        password = data.get("password")
 
-    async def __handle_get_public_key_request(self, user_id: str, data: dict):
-        target_user_id = data["target_user_id"]
-        public_key = self.__clients[target_user_id].public_key
-        if public_key is None:
-            raise UserNotRegisteredError("Target user is not registered on the server.")
-        get_public_key_request = Request(
-            request_type="get_public_key_response",
-            content={"public_key": public_key}
+        print(f"🧾 Received data: username={username}, email={email}, password={'*' * len(password) if password else None}")
+
+        if not username or not email or not password:
+            error_response = Request(
+                request_type="add_user_to_data_base_response",
+                content={"status": "error", "message": "Missing username, email, or password."}
+            )
+            await websocket.send(error_response.json_string)
+            print("❌ Sent error response: missing fields")  # 👈
+            return
+
+        print("dgfsafsgfwd")
+        success = await self.__add_user_to_db(username, email, password)
+
+        if success:
+            success_response = Request(
+                request_type="add_user_to_data_base_response",
+                content={"status": "success", "message": "User successfully added."}
+            )
+        else:
+            success_response = Request(
+                request_type="add_user_to_data_base_response",
+                content={"status": "error", "message": "Username or email already exists."}
+            )
+
+        print("📤 Sending response to client:", success_response.json_string)
+        await websocket.send(success_response.json_string)
+
+    async def __handle_check_user_exists_request(self, websocket, data: dict):
+        """
+        Handles request to check if user exists in the database by username, email and password.
+        Sends back a response with user_exists: True or False.
+        """
+        username = data.get("username")
+        email = data.get("email")
+        password = data.get("password")
+
+        if not username or not email or not password:
+            error_response = Request(
+                request_type="get_user_info_from_data_base_response",
+                content={"status": "error", "message": "Missing username, email or password."}
+            )
+            await websocket.send(error_response.json_string)
+            return
+
+        user_info = await self.__get_user_info_from_db(username, email, password)
+        user_exists = bool(user_info)
+
+        response = Request(
+            request_type="get_user_info_from_data_base",
+            content={"status": "success", "user_exists": user_exists}
         )
-        await self.__clients[user_id].websocket.send(get_public_key_request.json_string)
+        await websocket.send(response.json_string)
+
+    async def __handle_key_exchange_request(self, data: dict):
+        pass
 
     async def __receive_requests(self, websocket: WebSocket, requests_queue: asyncio.Queue):
         """Function which receives requests from user and adds them to the requests queue"""
@@ -332,6 +469,7 @@ class Server:
                 request = Request.from_string(request)
                 user_id = request.user_id
                 requests_queue.put_nowait(request)
+                print("Finish")
         except websockets.exceptions.ConnectionClosed:
             print(f"Connection closed for user: {user_id}")
         except asyncio.CancelledError:
@@ -345,19 +483,11 @@ class Server:
 
     async def __websocket_handler(self, websocket):
         print("New client connected.")
-        shared_user_id_request = await websocket.recv()
-        shared_user_id_request = Request.from_string(shared_user_id_request)
-        user_id = shared_user_id_request.user_id
-        print(f"User id received: {user_id}")
         requests_queue = asyncio.Queue()
-
-        client = self.__clients.setdefault(user_id, User())
-        client.websocket = websocket
-        client.is_online = True
-
         asyncio.create_task(self.__receive_requests(websocket, requests_queue))
         while True:
             request = await requests_queue.get()
+            print("Request received in __websocket_handler")
             request_type = request.type
             user_id = request.user_id
             data = request.content
@@ -377,13 +507,12 @@ class Server:
                     await self.__handle_relay_message_request(user_id, data)
                 case "get_target_user_status_request":
                     await self.__handle_get_target_user_status_request(user_id, data)
-                case "send_long_term_public_key_request":
-                    await self.__handle_send_long_term_public_key_request(user_id, data)
-                case "get_long_term_public_key_request":
-                    await self.__handle_get_long_term_public_key_request(websocket, data)
-                case "get_public_key_request":
-                    self.__handle_get_public_key_request(user_id, data)
-
+                case "add_user_to_data_base":
+                    await self.__handle_add_user_to_db_request(websocket, data)
+                case "get_user_info_from_data_base":
+                    await self.__handle_check_user_exists_request(websocket, data)
+                case "key_exchange_request":
+                    pass
                 # case "ping_request":
                 #     print("Ping request received")
                 #     pong_response = Request(
