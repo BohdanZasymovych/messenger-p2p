@@ -1,6 +1,8 @@
 let userId = prompt("Enter your user ID:");
 let currentTargetUserId = null;
 
+const testChatUserIds = ["alice", "bob", "charlie"]; // ⚠️ додай сюди тестові імена юзерів
+
 async function createChat() {
   const targetUserId = document.getElementById("newChatUserId").value.trim();
   if (!targetUserId) return;
@@ -73,19 +75,36 @@ function handleKeyPress(event) {
 }
 
 async function loadChats() {
-  const res = await fetch(`http://127.0.0.1:8000/get_chats/${userId}`);
-  const chats = await res.json();
-  chats.forEach(addChatToUI);
+  for (const targetId of testChatUserIds) {
+    if (targetId === userId) continue;
+
+    addChatToUI(targetId);
+
+    const res = await fetch(`http://127.0.0.1:8000/get_messages/${userId}/${targetId}`);
+    if (!res.ok) continue;
+    const messages = await res.json();
+
+    if (!currentTargetUserId) {
+      currentTargetUserId = targetId;
+      document.getElementById("chatWith").textContent = targetId;
+      document.getElementById("messages").innerHTML = "";
+      messages.forEach(msg => {
+        const bubble = document.createElement("div");
+        bubble.classList.add("message", msg.sender === "me" ? "sent" : "received");
+        bubble.textContent = msg.text;
+        document.getElementById("messages").appendChild(bubble);
+      });
+    }
+  }
 }
 
-window.onload = loadChats;
 async function loadRegisteredUsers() {
   const res = await fetch("http://127.0.0.1:8000/users");
   const users = await res.json();
-  console.log("Registered users:", users);  // 👉 можна потім показати в UI
+  console.log("Registered users:", users); // 👉 можна виводити в UI
 }
 
 window.onload = async () => {
   await loadChats();
-  await loadRegisteredUsers();
+  await loadRegisteredUsers(); // не обов’язково, але залишив
 };
