@@ -499,6 +499,9 @@ class Connection:
 
 class Chat:
     """Class to represent chat between two users"""
+    DATABASE_URL = os.getenv("DATABASE_URL_CLIENT")
+
+
     def __init__(self, user_id: str, target_user_id: str, on_message_callback: callable=None):
         self.user_id = user_id
         self.target_user_id = target_user_id
@@ -513,6 +516,42 @@ class Chat:
         self.__long_term_encryptinon = Encryption()
         self.__long_term_encryptinon.load_long_term_keys()
         print(f"Long term public key: {self.__long_term_encryptinon.public_key}")
+
+    async def __save_message_to_db(self, message: Message) -> None:
+        """Saves message to the database"""
+        user_id = message.user_id
+        target_user_id = message.target_user_id
+        message = message.content
+
+        conn = await asyncpg.connect(self.DATABASE_URL)
+        try:
+            await conn.execute("""--sql
+                INSERT INTO messages (user_id, target_user_id, message)
+                VALUES ($1, $2, $3);
+            """, user_id, target_user_id, message)
+        finally:
+            await conn.close()
+        print(f"Message from {user_id} to {target_user_id} saved to database.")
+
+    # async def __get_messages_from_db(self, user_id: str, target_user_id: str) -> list:
+    #     """Gets messages to specified user from the database"""
+    #     conn = await asyncpg.connect(self.DATABASE_URL)
+    #     try:
+    #         rows = await conn.fetch("""--sql
+    #             SELECT message FROM messages
+    #             WHERE user_id = $1 AND target_user_id = $2;
+    #         """, target_user_id, user_id)
+
+    #         await conn.execute("""--sql
+    #             DELETE FROM messages
+    #             WHERE user_id = $1 AND target_user_id = $2;
+    #         """, target_user_id, user_id)
+
+    #         messages = [row["message"] for row in rows]
+
+    #         return messages
+    #     finally:
+    #         await conn.close()
 
     async def __on_message_received(self):
         while True:
@@ -633,12 +672,14 @@ class Chat:
         while True:
             message = await ainput('You: ')
             if message:
-                self.__send_message_queue.put_nowait(Message(
-                                    message_type="message",
-                                    content=message,
-                                    user_id=self.user_id,
-                                    target_user_id=self.target_user_id
-                                    ))
+                message = Message(
+                    message_type="message",
+                    content=message,
+                    user_id=self.user_id,
+                    target_user_id=self.target_user_id
+                )
+                await self.__save_message_to_db(message)
+                self.__send_message_queue.put_nowait(message)
 
     def send_message(self, message: str):
         """Sends message to the target user"""
