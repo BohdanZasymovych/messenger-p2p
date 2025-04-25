@@ -384,7 +384,7 @@ class Server:
             content={"target_user_id": target_user_id}
         )
         await target_user_websocket.send(server_connection_request.json_string)
-
+#gfasgfgfds
     async def __handle_get_target_user_status_request(self, user_id: str, data: dict):
         target_user_id = data["target_user_id"]
         websocket = self.__clients[user_id].websocket
