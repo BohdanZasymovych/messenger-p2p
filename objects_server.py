@@ -432,13 +432,14 @@ class Server:
         await websocket.send(success_response.json_string)
 
     async def __handle_check_user_exists_request(self, websocket, data: dict):
-        """
-        Handles request to check if user exists in the database by username, email and password.
-        Sends back a response with user_exists: True or False.
-        """
+        """Handles request to check if user exists in the database by username, email, and password."""
+        print("🟢 Entered __handle_check_user_exists_request")
+
         username = data.get("username")
         email = data.get("email")
         password = data.get("password")
+
+        print(f"🧾 Received data: username={username}, email={email}, password={'*' * len(password) if password else None}")
 
         if not username or not email or not password:
             error_response = Request(
@@ -446,15 +447,34 @@ class Server:
                 content={"status": "error", "message": "Missing username, email or password."}
             )
             await websocket.send(error_response.json_string)
+            print("❌ Sent error response: missing fields")
             return
 
-        user_info = await self.__get_user_info_from_db(username, email, password)
-        user_exists = bool(user_info)
+        try:
+            user_info = await self.__get_user_info_from_db(username, email, password)
+            user_exists = bool(user_info)
 
-        response = Request(
-            request_type="get_user_info_from_data_base",
-            content={"status": "success", "user_exists": user_exists}
-        )
+            if user_exists:
+                response = Request(
+                    request_type="get_user_info_from_data_base_response",
+                    content={"status": "success", "user_exists": True}
+                )
+                print("✅ User found in database.")
+            else:
+                response = Request(
+                    request_type="get_user_info_from_data_base_response",
+                    content={"status": "error", "user_exists": False, "message": "Invalid credentials or user not found."}
+                )
+                print("⚠️ User not found or invalid password.")
+
+        except Exception as e:
+            print(f"❌ Error checking user in DB: {e}")
+            response = Request(
+                request_type="get_user_info_from_data_base_response",
+                content={"status": "error", "message": "Internal server error."}
+            )
+
+        print("📤 Sending response to client:", response.json_string)
         await websocket.send(response.json_string)
 
     async def __handle_key_exchange_request(self, data: dict):
