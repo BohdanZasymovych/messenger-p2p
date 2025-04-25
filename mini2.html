@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Security App</title>
+    <title>Sign Up - Security App</title>
     <style>
         body {
             margin: 0;
@@ -109,19 +109,31 @@
         <img src="photo_2024-12-02_10-34-48.jpg" alt="Profile Picture">
         <span>Sign up</span>
     </div>
+
     <div class="login-container">
         <p>Welcome to the world <br> of security</p>
         <form class="login-form">
-            <input type="email" placeholder="Enter email">
-            <input type="password" placeholder="Enter password">
-            <button class="continue-button">Continue</button>
+            <input type="text" name="nickname" placeholder="Enter nickname">
+            <input type="email" name="email" placeholder="Enter email">
+            <input type="password" name="password" placeholder="Enter password">
+            <button class="continue-button" type="submit">Continue</button>
         </form>
+
         <div class="divider">OR</div>
         <div class="social-buttons">
-            <button><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/768px-Google_%22G%22_logo.svg.png" width="20"> Enter with Google</button>
-            <button><img src="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" width="20"> Enter with GitHub</button>
+            <button>
+                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/768px-Google_%22G%22_logo.svg.png" width="20">
+                Enter with Google
+            </button>
+            <button>
+                <img src="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" width="20">
+                Enter with GitHub
+            </button>
             <button>📞 Enter with number</button>
         </div>
     </div>
+
+    <!-- ПІДКЛЮЧЕННЯ register.js -->
+    <script src="register.js"></script>
 </body>
 </html>
