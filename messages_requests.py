@@ -1,6 +1,7 @@
 """module providing classes for messages, requests and class for encryption"""
 import json
 import uuid
+import base64
 from datetime import datetime
 from nacl.public import PrivateKey, PublicKey, Box
 
@@ -122,30 +123,49 @@ class Request:
 class Encryption:
     """Class responsible for encryption of messages"""
     def __init__(self):
-        self.__private_key = PrivateKey.generate()
-        self.__public_key = self.__private_key.public_key
+        self.__private_key = None
+        self.__public_key = None
 
         self.__peer_public_key = None
         self.box = None
 
     @property
-    def public_key(self) -> PublicKey:
+    def public_key(self) -> str:
         """Returns the public key of the user"""
-        return self.__public_key
+        return base64.b64encode(bytes(self.__public_key)).decode('utf-8')
 
-    def set_peer_public_key(self, peer_public_key: PublicKey):
+    def generate_keys(self):
+        """Generates the public and private keys"""
+        self.__private_key = PrivateKey.generate()
+        self.__public_key = self.__private_key.public_key
+
+    def load_long_term_keys(self):
+        with open("keys/private_key.key", "rb") as f:
+            private_key = f.read()
+            private_key = base64.b64decode(private_key)
+            self.__private_key = PrivateKey(private_key)
+
+        with open("keys/public_key.key", "rb") as f:
+            public_key = f.read()
+            public_key = base64.b64decode(public_key)
+            self.__public_key = PublicKey(public_key)
+
+    def set_peer_public_key(self, peer_public_key: str):
         """Sets the public key of the peer"""
-        self.__peer_public_key = peer_public_key
+        decoded_key = base64.b64decode(peer_public_key)
+        self.__peer_public_key = PublicKey(decoded_key)
         self.box = Box(self.__private_key, self.__peer_public_key)
 
-    def encrypt(self, message: str) -> bytes:
-        """Encrypts the message using the box"""
+    def encrypt(self, message: str) -> str:
+        """Encrypts the message using the box and returns a base64 encoded string"""
         if self.box is None:
             raise ValueError("Peer public key not set")
-        return self.box.encrypt(message.encode())
+        encrypted_bytes = self.box.encrypt(message.encode())
+        return base64.b64encode(encrypted_bytes).decode('utf-8')
 
-    def decrypt(self, encrypted_message: bytes) -> str:
-        """Decrypts the message using the box"""
+    def decrypt(self, encrypted_message: str) -> str:
+        """Decrypts the base64 encoded encrypted message string"""
         if self.box is None:
             raise ValueError("Peer public key not set")
-        return self.box.decrypt(encrypted_message).decode()
+        encrypted_bytes = base64.b64decode(encrypted_message)
+        return self.box.decrypt(encrypted_bytes).decode("utf-8")

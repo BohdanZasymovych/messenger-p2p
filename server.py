@@ -1,6 +1,6 @@
 """Server for handling p2p connection signaling process"""
 import asyncio
-from objects import Server
+from objects_server import Server
 
 
 SERVER_IP = "0.0.0.0"
