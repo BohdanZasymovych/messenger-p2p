@@ -23,9 +23,8 @@ class User:
 
         self.role = None
 
-        self.is_pended = False # Indicates if someone is waiting for user
-        self.pending_user_id = None # User waiting for you
-        self.pended_user_id = None # User you are waiting for
+        self.pending_users = set() # User waiting for you
+        self.pended_users = set() # User you are waiting for
 
         self.public_key = None
 
@@ -33,15 +32,9 @@ class User:
         """Sets user to default disconnected state"""
         self.is_online = False
         self.role = None
-        self.is_pended = False
-        self.pending_user_id = None
-        self.pended_user_id = None
+        self.pended_users = set()
         self.websocket = None
         self.public_key = None
-
-    def __repr__(self):
-        return (f"User(is_online={self.is_online}, role={self.role!r}, is_pended={self.is_pended}, "
-                f"pending_user_id={self.pending_user_id!r}, pended_user_id={self.pended_user_id!r}")
 
 
 class Server:
@@ -123,22 +116,18 @@ class Server:
     def __disconnect_user(self, user_id: str):
         """Disconnect user with given user id"""
         disconnected_user = self.__clients[user_id]
-        if disconnected_user.pended_user_id:
-            self.__clients[disconnected_user.pended_user_id].is_pended = False
-            self.__clients[disconnected_user.pended_user_id].pending_user_id = None
 
-            # Here messages which were not sent to the target user
-            # should be received from user as one request
-            # and stored in the database
+        for pended_user_id in disconnected_user.pended_users:
+            self.__clients[pended_user_id].pending_users.discard(user_id)
 
         self.__clients[user_id].disconnect()
         print(f"User {user_id} was disconnected")
 
     async def __handle_register_request(self, websocket, user_id: str, data: dict):
         """Function which handles receiving and processing register_request from user"""
-        # client = self.__clients.setdefault(user_id, User())
-        # client.websocket = websocket
-        # client.is_online = True
+        client = self.__clients.setdefault(user_id, User())
+        client.websocket = websocket
+        client.is_online = True
         client = self.__clients[user_id]
         client.public_key = data["public_key"]
 
@@ -146,12 +135,6 @@ class Server:
 
         # Stored messages are sent to the user as one relay_message_request
         stored_messages = await self.__get_messages_from_db(user_id, target_user_id)
-        # for message in stored_messages:
-        #     relay_message_request = Request(
-        #         request_type="relay_message_request",
-        #         content={"message": message}
-        #     )
-        #     await websocket.send(relay_message_request.json_string)
 
         send_stored_messages = Request(
             request_type="send_stored_messages",
@@ -159,17 +142,14 @@ class Server:
         )
         await websocket.send(send_stored_messages.json_string)
 
-        if self.__clients[user_id].is_pended:
-            target_user_id = self.__clients[user_id].pending_user_id
-
-            self.__clients[user_id].is_pended = False
-            self.__clients[user_id].pending_user_id = None
-            self.__clients[target_user_id].pended_user_id = None
+        if target_user_id in self.__clients[user_id].pending_users:
+            self.__clients[user_id].pending_users.discard(target_user_id)
+            self.__clients[target_user_id].pended_users.discard(user_id)
 
             register_response = Request(
                 request_type="register_response",
                 content={"register_response_type": "connection_establishment_request",
-                        "user_id": self.__clients[user_id].pending_user_id, "role": "answer", "public_key": self.__clients[target_user_id].public_key}
+                        "user_id": target_user_id, "role": "answer", "public_key": self.__clients[target_user_id].public_key}
             )
             await websocket.send(register_response.json_string)
             print(f"Connection establishment request sent: {register_response.json_string}")
@@ -229,8 +209,8 @@ class Server:
 
         else:
             self.__clients[target_user_id].is_pended = True
-            self.__clients[target_user_id].pending_user_id = user_id
-            self.__clients[user_id].pended_user_id = target_user_id
+            self.__clients[target_user_id].pending_users.add(user_id)
+            self.__clients[user_id].pended_users.add(target_user_id)
 
             connection_response = Request(
                 request_type="connection_response",
