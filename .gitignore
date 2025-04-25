@@ -5,3 +5,5 @@ env
 *.log
 logs
 __pycache__
+keys
+docker-compose-user-separate.yml

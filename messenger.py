@@ -1,6 +1,6 @@
 """p2p messenger with signaling process via server"""
 import asyncio
-from objects import Chat
+from objects_user import Chat
 
 
 async def main():

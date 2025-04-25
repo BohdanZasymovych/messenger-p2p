@@ -33,13 +33,15 @@ services:
       - user_database
     volumes:
       - .:/app
+      - encryption_keys:/app/keys
     working_dir: /app
-    command: python messenger.py
+    command: sh -c "python generate_keys.py && python messenger.py"
     networks:
       - messenger_network
 
 volumes:
   postgres_data_user:
+  encryption_keys:
 
 networks:
   messenger_network:
