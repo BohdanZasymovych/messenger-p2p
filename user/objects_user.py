@@ -18,6 +18,14 @@ from websockets.legacy.server import WebSocketServerProtocol
 from messages_requests import Request, Message, Encryption
 WebSocket = Union[WebSocketClientProtocol, WebSocketServerProtocol]
 
+from fastapi import FastAPI, HTTPException, APIRouter, Request as FastAPIRequest
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+import uvicorn
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse
+import threading
+
 
 def setup_logging():
     """Sets up logging for the application"""
@@ -58,7 +66,7 @@ class UserNotRegisteredError(Exception):
 
 class Connection:
     """Class to represent connection between to users"""
-    SERVER_URL = "ws://messenger_server:8000"
+    SERVER_URL = "ws://messenger_server:9000"
 
     def __init__(self, user_id: str, target_user_id: str):
         self.user_id: str = user_id
@@ -598,7 +606,7 @@ class Chat:
                 message = message["message"]
 
             message = Message.from_string(message)
-            # self.__on_message_callback(message, self.target_user_id) # Function from App class
+            self.__on_message_callback(message, self.target_user_id) # Function from App class
             print(f"Message: {message}")
 
     async def __send_message_to_server(self, message: Message, encryption: str):
@@ -650,7 +658,7 @@ class Chat:
             message = await self.__send_message_queue.get()
             await self.__send_message_to_peer(message)
 
-    async def __close(self):
+    async def close(self):
         """Closes chat and disconnects user"""
         self.__connection.local_disconnect_initialized = True
         await self.__connection.server_disconect()
@@ -687,29 +695,29 @@ class Chat:
 
         self.__connection.websocket = websocket
         try:
-            get_message_task = asyncio.create_task(self.__message_loop())
+            # get_message_task = asyncio.create_task(self.__message_loop())
             send_message_task = asyncio.create_task(self.__send_message_loop())
             receive_message_task = asyncio.create_task(self.__on_message_received())
             connect_to_server_task = asyncio.create_task(self.__connection.connect_to_server(self.__encryption.public_key))
 
-            await asyncio.gather(connect_to_server_task, get_message_task, receive_message_task, send_message_task)
+            await asyncio.gather(connect_to_server_task, receive_message_task, send_message_task)
         finally:
-            await self.__close()
+            await self.close()
 
-    async def __message_loop(self):
-        """Receives messages from user and adds them to the message queue"""
-        print()
-        while True:
-            message = await ainput('You: ')
-            if message:
-                message = Message(
-                    message_type="message",
-                    content=message,
-                    user_id=self.user_id,
-                    target_user_id=self.target_user_id
-                )
-                await self.__save_message_to_db(message)
-                self.__send_message_queue.put_nowait(message)
+    # async def __message_loop(self):
+    #     """Receives messages from user and adds them to the message queue"""
+    #     print()
+    #     while True:
+    #         message = await ainput('You: ')
+    #         if message:
+    #             message = Message(
+    #                 message_type="message",
+    #                 content=message,
+    #                 user_id=self.user_id,
+    #                 target_user_id=self.target_user_id
+    #             )
+    #             await self.__save_message_to_db(message)
+    #             self.__send_message_queue.put_nowait(message)
 
     def send_message(self, message: str):
         """Sends message to the target user"""
@@ -721,17 +729,154 @@ class Chat:
                                         ))
 
 
+
+class LoginRequest(BaseModel):
+    user_id: str
+
+class ChatRequest(BaseModel):
+    user_id: str
+    target_user_id: str
+
+class MessageRequest(BaseModel):
+    user_id: str
+    target_user_id: str
+    text: str
+    timestamp: str
+
+
 class App:
     """Class representing messenger application"""
-    DATABASE_URL = os.getenv("DATABASE_URL_USER")
+    DATABASE_URL = os.getenv("DATABASE_URL_CLIENT")
 
     def __init__(self):
-        self.user_id: str | None = None
-        self.__chats = {} # user_id: Chat
+        # Create FastAPI instance
+        self.api = FastAPI()
+        self.user_id = None
+        
+        # Create a separate router for API endpoints FIRST
+        self.api_router = APIRouter(prefix="/api")
+        
+        self.__chats = {}  # user_id: Chat
+        self.__messages = {}  # Format: {target_user_id: [messages]}
+        
+        # User ID event to signal when user ID is set
+        self.__user_id_set = asyncio.Event()
+        
+        # Setup API routes BEFORE including router
+        self.__setup_api_routes()
+        
+        # Include the API router in the app
+        self.api.include_router(self.api_router)
+        
+        # Add CORS middleware
+        self.api.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+        
+        # Add root redirect
+        @self.api.get("/")
+        def redirect_to_chat():
+            return RedirectResponse(url="/chat.html")
+        
+        # Mount static files LAST - this ensures API routes take priority
+        frontend_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend")
+        self.api.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
+
+
+    def __setup_api_routes(self):
+        """Setup API routes for the FastAPI application"""
+
+        @self.api_router.post("/login")
+        async def login(request: FastAPIRequest):
+            try:
+                data = await request.json()
+                user_id = data.get("user_id")
+                print(f"Login attempt with user_id: {user_id}")
+                self.user_id = user_id
+                self.__user_id_set.set()
+                return {"status": "success", "user_id": user_id}
+            except Exception as e:
+                print(f"Login error: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+
+        @self.api_router.get("/get_messages/{user_id}/{target_user_id}")
+        async def get_messages(user_id: str, target_user_id: str):
+            # Validate the user
+            if user_id != self.user_id:
+                raise HTTPException(status_code=403, detail="Unauthorized access")
+
+            # Return messages for this chat
+            messages = self.__messages.get(target_user_id, [])
+            return messages
+
+        @self.api_router.post("/send_message")
+        async def send_message(msg: MessageRequest):
+            try:
+                # Validate the user
+                if msg.user_id != self.user_id:
+                    raise HTTPException(status_code=403, detail="Unauthorized access")
+                
+                # Store outgoing message in memory
+                message_entry = {
+                    "sender": "me",
+                    "text": msg.text,
+                    "timestamp": msg.timestamp
+                }
+
+                if msg.target_user_id not in self.__messages:
+                    self.__messages[msg.target_user_id] = []
+                self.__messages[msg.target_user_id].append(message_entry)
+
+                # Call the App's send_message method
+                self.send_message(msg.target_user_id, msg.text)
+
+                return {"status": "sent"}
+            except ValueError as e:
+                raise HTTPException(status_code=404, detail=str(e))
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+
+        @self.api_router.get("/users")
+        async def get_users():
+            # Return list of all users with whom the current user has chats
+            return list(self.__chats.keys())
+
+        @self.api_router.get("/get_chats/{user_id}")
+        async def get_chats(user_id: str):
+            # Validate if the requested user_id matches the app's user_id
+            if user_id != self.user_id:
+                raise HTTPException(status_code=403, detail="Unauthorized access")
+
+            # Return all chat users for the current user
+            chats = [id for id, chat in self.__chats.items() if chat.user_id == user_id]
+            return chats
+
+        @self.api_router.post("/add_chat")
+        async def add_chat(data: ChatRequest):
+            try:
+                # Validate the user
+                if data.user_id != self.user_id:
+                    raise HTTPException(status_code=403, detail="Unauthorized access")
+                
+                # Add chat using the existing method
+                await self.add_chat(data.target_user_id)
+                return {"status": "chat added"}
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
 
     async def add_chat(self, target_user_id: str):
         """Adds chat with the target user to application"""
-        self.__chats[target_user_id] = Chat(self.user_id, target_user_id)
+        # Create chat with the callback to receive messages
+        chat = Chat(
+            self.user_id, 
+            target_user_id,
+            on_message_callback=self.on_message_received
+        )
+        self.__chats[target_user_id] = chat
 
         # add chat to the database
         conn = await asyncpg.connect(self.DATABASE_URL)
@@ -744,11 +889,16 @@ class App:
         finally:
             await conn.close()
 
+        # Start chat in a background task so it doesn't block
+        asyncio.create_task(chat.open())
+
     async def remove_chat(self, target_user_id: str):
         """Removes chat with the target user from application"""
         if target_user_id not in self.__chats:
             return
 
+        chat = self.__chats[target_user_id]
+        await chat.close()  # Close the chat connection
         del self.__chats[target_user_id]
 
         # remove chat from the database
@@ -762,6 +912,7 @@ class App:
 
     async def __get_chats_from_db(self) -> list[str]:
         """Gets chats from database"""
+        print("Getting chats from database")
         conn = await asyncpg.connect(self.DATABASE_URL)
 
         try:
@@ -771,6 +922,7 @@ class App:
         finally:
             await conn.close()
 
+        print(f"Chats from database: {chats}")
         return [chat["target_user_id"] for chat in chats]
 
     def send_message(self, target_user_id: str, message: str):
@@ -782,17 +934,53 @@ class App:
 
     def on_message_received(self, message: Message, target_user_id: str):
         """Function which is called when message is received"""
-        # Message has to be sent to the frontend
-        pass
+        message_text = message.content  # Get text of the message (str)
+
+        # Create message entry
+        message_entry = {
+            "sender": "them",  # Message is from the other user
+            "text": message_text,
+            "timestamp": datetime.now().isoformat()
+        }
+
+        # Store message in memory
+        if target_user_id not in self.__messages:
+            self.__messages[target_user_id] = []
+        self.__messages[target_user_id].append(message_entry)
+
+        print(f"Received message from {target_user_id}: {message_text}")
 
     async def open(self):
-        # Sign in / sign up to the application process
+        # Start the API server
+        def start_server():
+            uvicorn.run(self.api, host="0.0.0.0", port=8000)
+
+        server_thread = threading.Thread(target=start_server)
+        server_thread.daemon = True
+        server_thread.start()
+
+        print("API server started on http://localhost:8000")
+        print("Waiting for user login...")
+
+        # Wait for user ID to be set from the frontend
+        await self.__user_id_set.wait()
+        print(f"User logged in: {self.user_id}")
 
         # Getting and initializing chats
         target_user_ids = await self.__get_chats_from_db()
         for target_user_id in target_user_ids:
+            if target_user_id == self.user_id:
+                continue
             chat = Chat(
                 user_id=self.user_id,
                 target_user_id=target_user_id,
                 on_message_callback=self.on_message_received)
             self.__chats[target_user_id] = chat
+            print(f"Chat loaded: {chat.target_user_id}")
+        print(f"All chats loaded: {self.__chats}")
+
+        for chat in self.__chats.values():
+            asyncio.create_task(chat.open())
+
+        while True:
+            await asyncio.sleep(1)
