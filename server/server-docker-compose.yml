@@ -22,7 +22,7 @@ services:
   server:
     build:
       context: .
-      dockerfile: prob.Dockerfile
+      dockerfile: server.Dockerfile
     container_name: messenger_server
     env_file:
       - .env

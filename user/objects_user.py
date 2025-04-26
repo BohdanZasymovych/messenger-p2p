@@ -1,5 +1,7 @@
 """objects related to the user"""
 import os
+import logging
+from datetime import datetime
 import asyncio
 from typing import Union
 from aioconsole import ainput
@@ -14,16 +16,44 @@ from websockets.legacy.client import WebSocketClientProtocol
 from websockets.legacy.server import WebSocketServerProtocol
 
 from messages_requests import Request, Message, Encryption
-from exceptions import IncorrectRequestTypeError, UserNotRegisteredError
-from loging_setup import setup_logging
+WebSocket = Union[WebSocketClientProtocol, WebSocketServerProtocol]
+
+
+def setup_logging():
+    """Sets up logging for the application"""
+    # Ensure folder for logs exists
+    FOLDER_PATH = "./logs"
+    if not os.path.exists(FOLDER_PATH):
+        os.makedirs(FOLDER_PATH)
+
+    # Set up logging
+    TIMESTAMP = datetime.now().strftime('%Y-%m-%d_%H-%M-%S-%f')[:-3]
+    LOG_FILENAME = f"./logs/log_{TIMESTAMP}.log"
+    logging.basicConfig(
+        filename=LOG_FILENAME,
+        level=logging.DEBUG,
+        format='%(asctime)s.%(msecs)03d [%(levelname)s] %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
 setup_logging()
 
-WebSocket = Union[WebSocketClientProtocol, WebSocketServerProtocol]
 
 
 ICE_CONFIG = RTCConfiguration(
     iceServers=[RTCIceServer(urls=["stun:stun.l.google.com:19302"])]
 )
+
+
+class IncorrectRequestTypeError(Exception):
+    """Exception which is raised when request with incorrect type is received"""
+
+
+class ConnectionTimeoutError(Exception):
+    """Exception which is raised when connection is not established within certain amount of time"""
+
+
+class UserNotRegisteredError(Exception):
+    """Exception which is raised when target user is not registered on server"""
 
 
 class Connection:
