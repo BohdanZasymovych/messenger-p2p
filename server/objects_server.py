@@ -1,5 +1,8 @@
 """objects related to the server"""
+
 import os
+import logging
+from datetime import datetime
 import asyncio
 from typing import Union
 import websockets
@@ -9,11 +12,36 @@ from websockets.legacy.client import WebSocketClientProtocol
 from websockets.legacy.server import WebSocketServerProtocol
 
 from messages_requests import Request
-from exceptions import IncorrectRequestTypeError, UserNotRegisteredError
-from loging_setup import setup_logging
-setup_logging()
+
 
 WebSocket = Union[WebSocketClientProtocol, WebSocketServerProtocol]
+
+
+def setup_logging():
+    """Sets up logging for the application"""
+    # Ensure folder for logs exists
+    folder_path = "./logs"
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
+
+    # Set up logging
+    timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S-%f')[:-3]
+    log_filename = f"./logs/log_{timestamp}.log"
+    logging.basicConfig(
+        filename=log_filename,
+        level=logging.DEBUG,
+        format='%(asctime)s.%(msecs)03d [%(levelname)s] %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+setup_logging()
+
+
+class IncorrectRequestTypeError(Exception):
+    """Exception which is raised when request with incorrect type is received"""
+
+
+class UserNotRegisteredError(Exception):
+    """Exception which is raised when target user is not registered on server"""
 
 
 class User:
