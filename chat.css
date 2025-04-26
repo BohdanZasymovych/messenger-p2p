@@ -1,0 +1,141 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { display: flex; height: 100vh; font-family: Arial, sans-serif; }
+
+.sidebar {
+  width: 25%;
+  background: #b3d9ff;
+  padding: 10px;
+  overflow-y: auto;
+}
+.sidebar h2 { color: purple; text-align: center; }
+
+.create-chat {
+  margin-top: 10px;
+  padding: 10px;
+  display: flex;
+  gap: 6px;
+}
+.create-chat input {
+  flex: 1;
+  padding: 6px;
+}
+.create-chat button {
+  padding: 6px 10px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.chat-list { list-style: none; padding-top: 10px; }
+.chat-list li {
+  padding: 10px;
+  background: #d0e4ff;
+  margin: 5px 0;
+  cursor: pointer;
+  border-radius: 5px;
+  text-align: center;
+}
+.chat-list li:hover { background: #aac8ff; }
+
+.chat-window {
+  flex-grow: 1;
+  background: #0f1a44;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 20px;
+  position: relative;
+}
+.chat-header {
+  display: flex;
+  align-items: center;
+  background: #192a56;
+  padding: 10px;
+  color: white;
+  width: 100%;
+  position: fixed;
+  top: 0;
+  left: 25%;
+  z-index: 1000;
+}
+.chat-header img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  margin-right: 10px;
+}
+.chat-header .contact-info { flex-grow: 1; }
+.chat-header .buttons {
+  display: flex;
+  gap: 10px;
+}
+.chat-header button {
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+}
+
+.messages {
+  flex-grow: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 60px;
+}
+.message {
+  padding: 10px;
+  border-radius: 10px;
+  max-width: 60%;
+}
+.message.sent {
+  background: #58a6ff;
+  align-self: flex-end;
+}
+.message.received {
+  background: #d0e4ff;
+  align-self: flex-start;
+}
+.input-bar {
+  display: flex;
+  margin-top: 10px;
+}
+.input-bar input {
+  flex-grow: 1;
+  padding: 10px;
+  border: none;
+  border-radius: 5px;
+}
+.input-bar button {
+  padding: 10px;
+  background: purple;
+  color: white;
+  border: none;
+  cursor: pointer;
+  margin-left: 5px;
+  border-radius: 5px;
+}
+
+.map-button {
+  width: 25%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: linear-gradient(180deg, #0057b7, #ffd700);
+  color: white;
+  font-size: 20px;
+  font-weight: bold;
+  text-decoration: none;
+  padding: 20px;
+  text-align: center;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.map-button:hover {
+  transform: scale(1.05);
+  box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2);
+}
