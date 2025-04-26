@@ -1,9 +1,19 @@
-.venv
-.menv
-venv
-env
-*.log
-logs
-__pycache__
-keys
-docker-compose-user-separate.yml
+# Virtual environments
+**/.venv
+**/venv
+**/env
+
+# Logs
+**/*.log
+**/logs/
+
+# Python
+**/__pycache__/
+**/*.py[cod]
+**/*$py.class
+
+# Keys
+**/keys/
+
+# Specific files
+**/docker-compose-user-separate.yml
