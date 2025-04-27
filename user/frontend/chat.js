@@ -139,39 +139,63 @@ async function sendMessage() {
 }
 }
 
-// Poll for new messages every few seconds
 function startMessagePolling() {
   setInterval(() => {
-      if (userId && currentTargetUserId) {
-          fetchNewMessages(currentTargetUserId);
-      }
-  }, 2000);  // Check every 2 seconds
+    if (!userId) return;
+    pollAllChats();
+  }, 2000);
 }
 
-// Fetch new messages for the current chat
+async function pollAllChats() {
+  // grab every chatId from the sidebar
+  const chatIds = Array.from(
+    document.querySelectorAll('#chatList li[data-user-id]')
+  ).map(li => li.dataset.userId);
+
+  for (const id of chatIds) {
+    await fetchNewMessages(id);
+  }
+}
+
 async function fetchNewMessages(targetUserId) {
   const res = await fetch(`/api/get_messages/${userId}/${targetUserId}`);
   if (!res.ok) return;
-  
   const messages = await res.json();
-  
-  // Count how many messages we already have displayed
-  const existingMessageCount = document.querySelectorAll('.message').length;
-  
-  // If there are new messages
-  if (messages.length > existingMessageCount) {
-      // Only display new messages
-      for (let i = existingMessageCount; i < messages.length; i++) {
-          const msg = messages[i];
-          const bubble = document.createElement("div");
-          bubble.classList.add("message", msg.sender === "me" ? "sent" : "received");
-          bubble.textContent = msg.text;
-          document.getElementById("messages").appendChild(bubble);
-      }
-      
-      // Scroll to the bottom
-      const messagesContainer = document.getElementById("messages");
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+  // we only want to append *truly new* messages
+  // so count what’s already in memory
+  const existingCount = (targetUserId === currentTargetUserId)
+    // only count in the visible container
+    ? document.querySelectorAll('#messages .message').length
+    : (document.querySelectorAll(
+         `#chatList li[data-user-id="${targetUserId}"] .badge`
+       ).length || 0);
+
+  if (messages.length <= existingCount) return;
+
+  const newMsgs = messages.slice(existingCount);
+
+  if (targetUserId === currentTargetUserId) {
+    // if it’s the open chat, render into the pane
+    const container = document.getElementById('messages');
+    newMsgs.forEach(msg => {
+      const bubble = document.createElement("div");
+      bubble.classList.add("message", msg.sender === "me" ? "sent" : "received");
+      bubble.textContent = msg.text;
+      container.appendChild(bubble);
+    });
+    container.scrollTop = container.scrollHeight;
+  } else {
+    // otherwise mark the chat in the sidebar with a little badge
+    let li = document.querySelector(
+      `#chatList li[data-user-id="${targetUserId}"]`
+    );
+    if (li && !li.querySelector('.badge')) {
+      const badge = document.createElement('span');
+      badge.classList.add('badge');
+      badge.textContent = '•';
+      li.appendChild(badge);
+    }
   }
 }
 
@@ -230,9 +254,9 @@ async function loadChats() {
     try {
       const msgRes = await fetch(`/api/get_messages/${userId}/${targetId}`);
       if (!msgRes.ok) continue;
-      if (!currentTargetUserId) {
-        await openChat(targetId);
-      }
+      // if (!currentTargetUserId) {
+      //   await openChat(targetId);
+      // }
     } catch (error) {
       console.error(`Failed to load messages for ${targetId}:`, error);
     }
