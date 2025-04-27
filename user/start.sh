@@ -12,7 +12,7 @@ echo ""
 echo "====================================================="
 echo "  Chat application is running!"
 echo ""
-echo "  Access the web interface at: http://localhost:8000"
+echo "  Access the web interface at: http://0.0.0.0:8000"
 echo ""
 echo "  If you're running this locally, the browser should"
 echo "  open automatically. If not, please open the URL"
@@ -23,9 +23,9 @@ echo ""
 # Try to open browser if we're in an environment that supports it
 if [ -n "$DISPLAY" ]; then
     # Try different commands to open browser
-    xdg-open http://localhost:8000 2>/dev/null || \
-    open http://localhost:8000 2>/dev/null || \
-    python -m webbrowser http://localhost:8000 2>/dev/null &
+    xdg-open http://0.0.0.0:8000 2>/dev/null || \
+    open http://0.0.0.0:8000 2>/dev/null || \
+    python -m webbrowser http://0.0.0.0:8000 2>/dev/null &
 fi
 
 # Keep the container running

@@ -279,11 +279,6 @@ window.onload = () => {
   
   // Set up login button event (if not already set in HTML)
   document.querySelector("#loginOverlay button").onclick = login;
-  
-  // Pre-fill the login field with a test ID for easier testing (optional)
-  if (!storedUserId) {
-    document.getElementById("loginUserId").value = "testuser";
-  }
 
   startMessagePolling();
 };

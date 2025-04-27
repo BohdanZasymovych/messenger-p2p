@@ -30,10 +30,10 @@ services:
     tty: true
     environment:
       DATABASE_URL_CLIENT: "${DATABASE_URL_CLIENT}"
-    ports:
-      - "8000:8000"
-      - "19302:19302/udp"
-    # network_mode: host
+    # ports:
+    #   - "8000:8000"
+    #   - "19302:19302/udp"
+    network_mode: "host"
     depends_on:
       - user_database
     volumes:
@@ -42,8 +42,8 @@ services:
       - message_data:/app/data 
     working_dir: /app
     command: sh -c "python generate_keys.py && chmod +x start.sh && ./start.sh"
-    networks:
-      - messenger_network
+    # networks:
+    #   - messenger_network
 
 volumes:
   postgres_data_user:

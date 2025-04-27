@@ -620,7 +620,7 @@ class Chat:
 
     async def __send_message_to_server(self, message: Message, encryption: str):
         message_json = message.json_string
-        print(f"Encription: {encryption}")
+        print(f"Encryption: {encryption}")
         if encryption == "long_term_public_key":
             encrypted_message = self.__long_term_encryptinon.encrypt(message_json)
         else:
