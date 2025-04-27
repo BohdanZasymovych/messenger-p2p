@@ -24,9 +24,7 @@ function login() {
     console.log("Login successful, waiting for backend initialization...");
 
     setTimeout(() => {
-      // Hide login overlay
       document.getElementById("loginOverlay").style.display = "none";
-      // Show chat interface
       document.querySelector(".sidebar").style.display = "block";
       document.querySelector(".map-button").style.display = "block";
 
@@ -106,23 +104,65 @@ async function openChat(targetUserId) {
   const res = await fetch(`/api/get_messages/${userId}/${targetUserId}`);
   const messages = await res.json();
 
+  let currentDate = null;
+  
   messages.forEach(msg => {
+    const msgDate = new Date(msg.timestamp);
+    const dateStr = formatDate(msgDate);
+    
+    if (dateStr !== currentDate) {
+      const dateDiv = document.createElement("div");
+      dateDiv.classList.add("date-divider");
+      dateDiv.textContent = dateStr;
+      document.getElementById("messages").appendChild(dateDiv);
+      currentDate = dateStr;
+    }
+    
     const bubble = document.createElement("div");
     bubble.classList.add("message", msg.sender === "me" ? "sent" : "received");
     bubble.textContent = msg.text;
+    
+    if (msg.timestamp) {
+      const timeEl = document.createElement("div");
+      timeEl.classList.add("message-time");
+      const timeString = msgDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+      timeEl.textContent = timeString;
+      bubble.appendChild(timeEl);
+    }
+    
     document.getElementById("messages").appendChild(bubble);
   });
 
-  // Scroll to the bottom when opening a chat
   const messagesContainer = document.getElementById("messages");
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
+
+
+function formatDate(date) {
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  
+  if (date.toDateString() === today.toDateString()) {
+    return "Today";
+  }
+  
+  if (date.toDateString() === yesterday.toDateString()) {
+    return "Yesterday";
+  }
+  
+  const options = { day: 'numeric', month: 'long' };
+  return date.toLocaleDateString('en-US', options);
+}
+
 
 async function sendMessage() {
   const input = document.getElementById("messageInput");
   const messageText = input.value.trim();
   if (!messageText || !currentTargetUserId) return;
 
+  const timestamp = new Date().toISOString();
+  
   const res = await fetch("/api/send_message", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -130,18 +170,37 @@ async function sendMessage() {
       user_id: userId,
       target_user_id: currentTargetUserId,
       text: messageText,
-      timestamp: new Date().toISOString()
+      timestamp: timestamp
     })
   });
 
   if (res.ok) {
+    const now = new Date();
+    const dateStr = formatDate(now);
+    
+    const lastDivider = document.querySelector(".date-divider:last-of-type");
+    const needsNewDivider = !lastDivider || lastDivider.textContent !== dateStr;
+    
+    if (needsNewDivider) {
+      const dateDiv = document.createElement("div");
+      dateDiv.classList.add("date-divider");
+      dateDiv.textContent = dateStr;
+      document.getElementById("messages").appendChild(dateDiv);
+    }
+    
     const bubble = document.createElement("div");
     bubble.classList.add("message", "sent");
     bubble.textContent = messageText;
+    
+    const timeEl = document.createElement("div");
+    timeEl.classList.add("message-time");
+    const timeString = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    timeEl.textContent = timeString;
+    bubble.appendChild(timeEl);
+    
     document.getElementById("messages").appendChild(bubble);
     input.value = "";
     
-    // Scroll to the bottom after sending
     const messagesContainer = document.getElementById("messages");
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
   }
@@ -170,34 +229,35 @@ async function fetchNewMessages(targetUserId) {
   if (!res.ok) return;
   const messages = await res.json();
 
-  // we only want to append *truly new* messages
-  // so count what's already in memory
   const existingCount = (targetUserId === currentTargetUserId)
-    // only count in the visible container
     ? document.querySelectorAll('#messages .message').length
-    : (document.querySelectorAll(
-         `#chatList li[data-user-id="${targetUserId}"] .badge`
-       ).length || 0);
+    : 0;
 
   if (messages.length <= existingCount) return;
 
   const newMsgs = messages.slice(existingCount);
 
   if (targetUserId === currentTargetUserId) {
-    // if it's the open chat, render into the pane
     const container = document.getElementById('messages');
     newMsgs.forEach(msg => {
       const bubble = document.createElement("div");
       bubble.classList.add("message", msg.sender === "me" ? "sent" : "received");
       bubble.textContent = msg.text;
+      
+      if (msg.timestamp) {
+        const timeEl = document.createElement("div");
+        timeEl.classList.add("message-time");
+        const date = new Date(msg.timestamp);
+        const timeString = date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        timeEl.textContent = timeString;
+        bubble.appendChild(timeEl);
+      }
+      
       container.appendChild(bubble);
     });
     container.scrollTop = container.scrollHeight;
   } else {
-    // otherwise mark the chat in the sidebar with a little badge
-    let li = document.querySelector(
-      `#chatList li[data-user-id="${targetUserId}"]`
-    );
+    let li = document.querySelector(`#chatList li[data-user-id="${targetUserId}"]`);
     if (li && !li.querySelector('.badge')) {
       const badge = document.createElement('span');
       badge.classList.add('badge');
