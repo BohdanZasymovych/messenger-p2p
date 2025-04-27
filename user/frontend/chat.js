@@ -25,9 +25,7 @@ function login() {
     console.log("Login successful, waiting for backend initialization...");
 
     setTimeout(() => {
-      // Hide login overlay
       document.getElementById("loginOverlay").style.display = "none";
-      // Show chat interface
       document.querySelector(".sidebar").style.display = "block";
       document.querySelector(".chat-window").style.display = "block";
       document.querySelector(".map-button").style.display = "block";
