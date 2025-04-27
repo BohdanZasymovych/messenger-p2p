@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS messages (
     user_id TEXT NOT NULL,
     target_user_id TEXT NOT NULL,
     message TEXT NOT NULL,
+    is_outgoing BOOLEAN DEFAULT TRUE,
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
