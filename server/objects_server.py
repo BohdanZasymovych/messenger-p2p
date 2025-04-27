@@ -72,7 +72,7 @@ class Server:
     def __init__(self, ip: str, port: int):
         self.ip: str = ip
         self.port: int = port
-        self.__clients: dict[User] = {'1': User(), '2': User()} # user_id: User
+        self.__clients: dict[User] = {'1': User(), '2': User(), '3': User(), '4': User(), '5': User()} # user_id: User
 
     async def __save_message_to_db(self, user_id: str, target_user_id: str, message: str) -> None:
         """Saves message to the database"""

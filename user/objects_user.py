@@ -1,12 +1,9 @@
 """objects related to the user"""
 import os
-
-os.environ['AIORTC_MIN_PORT'] = '40000'
-os.environ['AIORTC_MAX_PORT'] = '40100'
-
 import logging
 from datetime import datetime
 import asyncio
+import threading
 from typing import Union
 # from aioconsole import ainput
 from aiortc import (RTCPeerConnection,
@@ -20,16 +17,17 @@ import asyncpg
 from websockets.legacy.client import WebSocketClientProtocol
 from websockets.legacy.server import WebSocketServerProtocol
 
-from messages_requests import Request, Message, Encryption
-WebSocket = Union[WebSocketClientProtocol, WebSocketServerProtocol]
-
 from fastapi import FastAPI, HTTPException, APIRouter, Request as FastAPIRequest
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
-import threading
+
+from messages_requests import Request, Message, Encryption
+
+WebSocket = Union[WebSocketClientProtocol, WebSocketServerProtocol]
+
 
 
 def setup_logging():
@@ -84,7 +82,6 @@ class Connection:
         self.data_channel: RTCDataChannel | None = None
         self.__websocket: WebSocket | None = None
 
-        # self.connection_type: str = "disconnected"
         self.is_connected_websocket: bool = False
         self.is_p2p_connected: asyncio.Event = asyncio.Event()
         self.p2p_connection_state: str = "disconnected"
@@ -101,8 +98,6 @@ class Connection:
         self.__receive_server_requests_task: asyncio.Task | None = None
         self.__handle_server_requests_task: asyncio.Task | None = None
         # self.__ping_request_task: asyncio.Task | None = None
-        self.__establish_p2p_connection_task: asyncio.Task | None = None
-
 
         self.received_messages_queue: asyncio.Queue = asyncio.Queue()
         self.requests_queue: asyncio.Queue = asyncio.Queue()
@@ -142,7 +137,6 @@ class Connection:
         self.is_p2p_connected.clear()
         self.local_connection_initiated.clear()
         self.p2p_connection_state = "disconnected"
-        # self.connection_type = "disconnected"
         self.peer_connection = None
         self.data_channel = None
         self.is_p2p_connected.clear()
@@ -336,11 +330,9 @@ class Connection:
             case _:
                 raise ValueError("Incorrect role.")
 
-        # is_p2p_connected = False ### For testing failing p2p connection
         if is_p2p_connected:
             self.is_p2p_connected.set()
             self.p2p_connection_state = "connected"
-            # self.connection_type = "p2p_connection"
             self.is_target_user_online = True
 
         return is_p2p_connected
@@ -372,7 +364,10 @@ class Connection:
                 request_type = request.type
 
                 if request_type == "relay_message_request":
-                    self.__receive_message(request.content["message"], encryption="public_key", public_key=request.content["public_key"])
+                    self.__receive_message(request.content["message"],
+                                        encryption="public_key",
+                                        public_key=request.content["public_key"]
+                                    )
 
                 elif request_type == "send_stored_messages":
                     self.__receive_stored_messages(request.content["message"])
@@ -537,6 +532,7 @@ class Connection:
                 print("Connection timeout in connection.connect().")
                 self.is_p2p_connected.clear()
                 self.p2p_connection_state = "disconnected"
+                self.is_p2p_connection_failed = True
 
         public_key = await self.connect_to_peer()
         return public_key
@@ -612,27 +608,27 @@ class Chat:
                         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     );
                 """)
-                
+
                 rows = await conn.fetch("""--sql
                     SELECT * FROM messages
-                    WHERE (user_id = $1 AND target_user_id = $2) 
+                    WHERE (user_id = $1 AND target_user_id = $2)
                     OR (user_id = $2 AND target_user_id = $1)
                     ORDER BY timestamp ASC
                     LIMIT $3;
                 """, self.user_id, self.target_user_id, limit)
 
                 print(f"Retrieved {len(rows)} messages from database for chat between {self.user_id} and {self.target_user_id}")
-                
+
                 messages = []
                 for row in rows:
                     is_from_me = row["user_id"] == self.user_id
-                    
+
                     messages.append({
                         "sender": "me" if is_from_me else "you",
                         "text": row["message"],
                         "timestamp": row["timestamp"].isoformat() if hasattr(row["timestamp"], "isoformat") else str(row["timestamp"])
                     })
-                
+
                 return messages
             finally:
                 await conn.close()
@@ -666,24 +662,6 @@ class Chat:
                 self.__on_message_callback(message_obj, self.target_user_id)
             
             print(f"Message received and saved: {message_obj}")
-
-    # async def __on_message_received(self):
-    #     while True:
-    #         message = await self.__connection.received_messages_queue.get()
-    #         encryption = message["encryption"]
-    #         if message["public_key"] is not None:
-    #             self.__encryption.set_peer_public_key(message["public_key"])
-    
-    #         if encryption == "long_term_public_key":
-    #             message = self.__long_term_encryptinon.decrypt(message["message"])
-    #         elif encryption == "public_key":
-    #             message = self.__encryption.decrypt(message["message"])
-    #         else:
-    #             message = message["message"]
-
-    #         message = Message.from_string(message)
-    #         self.__on_message_callback(message, self.target_user_id) # Function from App class
-    #         print(f"Message: {message}")
 
     async def __send_message_to_server(self, message: Message, encryption: str):
         message_json = message.json_string
@@ -812,16 +790,15 @@ class Chat:
                 user_id=self.user_id,
                 target_user_id=self.target_user_id
             )
-            
+
             asyncio.create_task(self.__save_message_to_db(message_obj, is_outgoing=True))
 
             self.__send_message_queue.put_nowait(message_obj)
-            
+
             print(f"Message queued for sending to {self.target_user_id}")
         except Exception as e:
             print(f"Error in send_message: {str(e)}")
             raise
-    
 
 
 class LoginRequest(BaseModel):
@@ -848,22 +825,22 @@ class App:
         self.user_id = None
 
         self.__chats_loaded = False
-        
+
         # Create a separate router for API endpoints FIRST
         self.api_router = APIRouter(prefix="/api")
-        
+
         self.__chats = {}  # user_id: Chat
         self.__messages = {}  # Format: {target_user_id: [messages]}
-        
+
         # User ID event to signal when user ID is set
         self.__user_id_set = threading.Event()
-        
+
         # Setup API routes BEFORE including router
         self.__setup_api_routes()
-        
+
         # Include the API router in the app
         self.api.include_router(self.api_router)
-        
+
         # Add CORS middleware
         self.api.add_middleware(
             CORSMiddleware,
@@ -872,12 +849,12 @@ class App:
             allow_methods=["*"],
             allow_headers=["*"],
         )
-        
+
         # Add root redirect
         @self.api.get("/")
         def redirect_to_chat():
             return RedirectResponse(url="/chat.html")
-        
+
         # Mount static files LAST - this ensures API routes take priority
         frontend_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend")
         self.api.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")

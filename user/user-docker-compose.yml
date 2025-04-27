@@ -1,11 +1,7 @@
-# version: '3.8'
-
 services:
   user_database:
     image: postgres:14
     container_name: messenger_user_db
-    # env_file:
-    #   - .env
     environment:
       POSTGRES_USER: "${POSTGRES_USER_CLIENT}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD_CLIENT}"
@@ -24,15 +20,16 @@ services:
       context: .
       dockerfile: messenger.Dockerfile
     container_name: messenger_app
-    # env_file:
-    #   - .env
     stdin_open: true
     tty: true
     environment:
       DATABASE_URL_CLIENT: "${DATABASE_URL_CLIENT}"
+    sysctls:
+      net.ipv4.ip_local_port_range: "40000 40100"
     ports:
       - "8000:8000"
       - "19302:19302/udp"
+      - "40000-40100:40000-40100/udp"
     # network_mode: "host"
     depends_on:
       - user_database
