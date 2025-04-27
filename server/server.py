@@ -4,7 +4,7 @@ from objects_server import Server
 
 
 SERVER_IP = "0.0.0.0"
-SERVER_PORT = 8000
+SERVER_PORT = 9000
 
 
 if __name__ == "__main__":

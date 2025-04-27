@@ -4,155 +4,78 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Chat UI</title>
+  <link rel="stylesheet" href="chat.css" />
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { display: flex; height: 100vh; font-family: Arial, sans-serif; }
-
-    .sidebar {
-      width: 25%;
-      background: #b3d9ff;
-      padding: 10px;
-      overflow-y: auto;
-    }
-    .sidebar h2 { color: purple; text-align: center; }
-    .chat-list { list-style: none; padding-top: 10px; }
-    .chat-list li {
-      display: flex;
-      align-items: center;
-      padding: 10px;
-      background: #d0e4ff;
-      margin: 5px 0;
-      cursor: pointer;
-      border-radius: 5px;
-    }
-    .chat-list li img {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      margin-right: 10px;
-    }
-    .chat-list li:hover { background: #aac8ff; }
-
-    .chat-window {
-      flex-grow: 1;
-      background: #0f1a44;
-      display: flex;
-      flex-direction: column;
-      justify-content: flex-end;
-      padding: 20px;
-      position: relative;
-    }
-    .chat-header {
-      display: flex;
-      align-items: center;
-      background: #192a56;
-      padding: 10px;
-      color: white;
-      width: 100%;
+    #loginOverlay {
       position: fixed;
       top: 0;
-      left: 25%;
-      z-index: 1000;
-    }
-    .chat-header img {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      margin-right: 10px;
-    }
-    .chat-header .contact-info {
-      flex-grow: 1;
-    }
-    .chat-header .buttons {
-      display: flex;
-      gap: 10px;
-    }
-    .chat-header button {
-      background: none;
-      border: none;
-      color: white;
-      cursor: pointer;
-    }
-
-    .messages {
-      flex-grow: 1;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      margin-top: 60px;
-    }
-    .message {
-      padding: 10px;
-      border-radius: 10px;
-      max-width: 60%;
-    }
-    .message.sent {
-      background: #58a6ff;
-      align-self: flex-end;
-    }
-    .message.received {
-      background: #d0e4ff;
-      align-self: flex-start;
-    }
-    .input-bar {
-      display: flex;
-      margin-top: 10px;
-    }
-    .input-bar input {
-      flex-grow: 1;
-      padding: 10px;
-      border: none;
-      border-radius: 5px;
-    }
-    .input-bar button {
-      padding: 10px;
-      background: purple;
-      color: white;
-      border: none;
-      cursor: pointer;
-      margin-left: 5px;
-      border-radius: 5px;
-    }
-
-    .map-button {
-      width: 25%;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.8);
       display: flex;
       justify-content: center;
       align-items: center;
-      background: linear-gradient(180deg, #0057b7, #ffd700);
-      color: white;
-      font-size: 20px;
-      font-weight: bold;
-      text-decoration: none;
-      padding: 20px;
-      text-align: center;
-      border-radius: 10px;
-      cursor: pointer;
-      transition: transform 0.2s, box-shadow 0.2s;
+      z-index: 1000;
     }
-    .map-button:hover {
-      transform: scale(1.05);
-      box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2);
+    
+    .login-container {
+      background-color: white;
+      padding: 30px;
+      border-radius: 10px;
+      text-align: center;
+      max-width: 400px;
+      width: 100%;
+    }
+    
+    .login-container h2 {
+      margin-top: 0;
+    }
+    
+    .login-container input {
+      width: 100%;
+      padding: 10px;
+      margin: 15px 0;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      font-size: 16px;
+      box-sizing: border-box;
+    }
+    
+    .login-container button {
+      padding: 10px 15px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
     }
   </style>
 </head>
 <body>
-  <div class="sidebar">
-    <h2>Chats</h2>
-    <ul class="chat-list">
-      <li><img src="photos/budanov.jpg" alt="Contact"> Badabuba</li>
-      <li><img src="photos/budanov.jpg" alt="Contact"> Badabuba</li>
-      <li><img src="photos/budanov.jpg" alt="Contact"> Badabuba</li>
-      <li><img src="photos/budanov.jpg" alt="Contact"> Badabuba</li>
-      <li><img src="photos/budanov.jpg" alt="Contact"> Badabuba</li>
-    </ul>
+  <div id="loginOverlay">
+    <div class="login-container">
+      <h2>Welcome to Messenger</h2>
+      <p>Please enter your user ID to continue</p>
+      <input type="text" id="loginUserId" placeholder="Your user ID">
+      <button onclick="login()">Start Chatting</button>
+    </div>
   </div>
 
-  <div class="chat-window">
+  <div class="sidebar">
+    <h2>Chats</h2>
+    <div class="create-chat">
+      <input type="text" id="newChatUserId" placeholder="Enter user ID..." />
+      <button onclick="createChat()">➕ Add Chat</button>
+    </div>
+    <ul class="chat-list" id="chatList"></ul>
+  </div>
+
+  <div class="chat-window" id="chatWindow">
     <div class="chat-header">
       <img src="photos/budanov.jpg" alt="Contact">
-      <div class="contact-info">Badabuba</div>
+      <div class="contact-info" id="chatWith">Select a chat</div>
       <div class="buttons">
         <button>📞</button>
         <button>⋮</button>
@@ -160,32 +83,13 @@
     </div>
 
     <div class="messages" id="messages"></div>
-    <div class="input-bar">
+    <div class="input-bar" id="inputBar">
       <input type="text" id="messageInput" placeholder="Type smth..." onkeypress="handleKeyPress(event)">
       <button onclick="sendMessage()">Send</button>
     </div>
   </div>
 
   <a href="map.html" class="map-button">🌍 Open Map</a>
-
-  <script>
-    function sendMessage() {
-      const input = document.getElementById('messageInput');
-      const messageText = input.value.trim();
-      if (messageText) {
-        const messageBubble = document.createElement('div');
-        messageBubble.classList.add('message', 'sent');
-        messageBubble.textContent = messageText;
-        document.getElementById('messages').appendChild(messageBubble);
-        input.value = '';
-      }
-    }
-
-    function handleKeyPress(event) {
-      if (event.key === 'Enter') {
-        sendMessage();
-      }
-    }
-  </script>
+  <script src="chat.js"></script>
 </body>
 </html>
