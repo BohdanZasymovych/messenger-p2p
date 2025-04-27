@@ -101,7 +101,20 @@ async function openChat(targetUserId) {
   const res = await fetch(`/api/get_messages/${userId}/${targetUserId}`);
   const messages = await res.json();
 
+  let currentDate = null;
+  
   messages.forEach(msg => {
+    const msgDate = new Date(msg.timestamp);
+    const dateStr = formatDate(msgDate);
+    
+    if (dateStr !== currentDate) {
+      const dateDiv = document.createElement("div");
+      dateDiv.classList.add("date-divider");
+      dateDiv.textContent = dateStr;
+      document.getElementById("messages").appendChild(dateDiv);
+      currentDate = dateStr;
+    }
+    
     const bubble = document.createElement("div");
     bubble.classList.add("message", msg.sender === "me" ? "sent" : "received");
     bubble.textContent = msg.text;
@@ -109,10 +122,7 @@ async function openChat(targetUserId) {
     if (msg.timestamp) {
       const timeEl = document.createElement("div");
       timeEl.classList.add("message-time");
-      
-      const date = new Date(msg.timestamp);
-      const timeString = date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-      
+      const timeString = msgDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
       timeEl.textContent = timeString;
       bubble.appendChild(timeEl);
     }
@@ -120,10 +130,28 @@ async function openChat(targetUserId) {
     document.getElementById("messages").appendChild(bubble);
   });
   
-  // Прокручуємо до останнього повідомлення
   const messagesContainer = document.getElementById("messages");
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
+
+
+function formatDate(date) {
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  
+  if (date.toDateString() === today.toDateString()) {
+    return "Today";
+  }
+  
+  if (date.toDateString() === yesterday.toDateString()) {
+    return "Yesterday";
+  }
+  
+  const options = { day: 'numeric', month: 'long' };
+  return date.toLocaleDateString('en-US', options);
+}
+
 
 async function sendMessage() {
   const input = document.getElementById("messageInput");
@@ -144,13 +172,26 @@ async function sendMessage() {
   });
 
   if (res.ok) {
+    const now = new Date();
+    const dateStr = formatDate(now);
+    
+    const lastDivider = document.querySelector(".date-divider:last-of-type");
+    const needsNewDivider = !lastDivider || lastDivider.textContent !== dateStr;
+    
+    if (needsNewDivider) {
+      const dateDiv = document.createElement("div");
+      dateDiv.classList.add("date-divider");
+      dateDiv.textContent = dateStr;
+      document.getElementById("messages").appendChild(dateDiv);
+    }
+    
     const bubble = document.createElement("div");
     bubble.classList.add("message", "sent");
     bubble.textContent = messageText;
     
     const timeEl = document.createElement("div");
     timeEl.classList.add("message-time");
-    const timeString = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    const timeString = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
     timeEl.textContent = timeString;
     bubble.appendChild(timeEl);
     
