@@ -1,15 +1,20 @@
 """objects related to the user"""
 import os
+
+os.environ['AIORTC_MIN_PORT'] = '40000'
+os.environ['AIORTC_MAX_PORT'] = '40100'
+
 import logging
 from datetime import datetime
 import asyncio
 from typing import Union
-from aioconsole import ainput
+# from aioconsole import ainput
 from aiortc import (RTCPeerConnection,
                     RTCSessionDescription,
                     RTCDataChannel,
                     RTCConfiguration,
                     RTCIceServer)
+
 import websockets
 import asyncpg
 from websockets.legacy.client import WebSocketClientProtocol
@@ -45,12 +50,15 @@ def setup_logging():
     )
 setup_logging()
 
-
+ICE_SERVERS = [
+        RTCIceServer(urls=["stun:stun.l.google.com:19302"]),
+        RTCIceServer(urls=["stun:stun1.l.google.com:19302"]),
+        RTCIceServer(urls=["stun:stun2.l.google.com:19302"])
+]
 
 ICE_CONFIG = RTCConfiguration(
-    iceServers=[RTCIceServer(urls=["stun:stun.l.google.com:19302"])]
+    iceServers=ICE_SERVERS
 )
-
 
 class IncorrectRequestTypeError(Exception):
     """Exception which is raised when request with incorrect type is received"""
@@ -412,22 +420,22 @@ class Connection:
     #         await self.websocket.send(ping_request.json_string)
     #         await asyncio.sleep(1)
 
-    # async def __update_target_user_status(self):
-    #     """Updates target user status (online, offline) by sending get_target_user_status_request"""
-    #     get_target_user_status_request = Request(
-    #         request_type="get_target_user_status_request",
-    #         user_id=self.user_id,
-    #         content={"target_user_id": self.target_user_id}
-    #     )
-    #     target_user_status_response = asyncio.Future()
-    #     self.futures["target_user_status_response"] = target_user_status_response
-    #     await self.websocket.send(get_target_user_status_request.json_string)
+    async def __update_target_user_status(self):
+        """Updates target user status (online, offline) by sending get_target_user_status_request"""
+        get_target_user_status_request = Request(
+            request_type="get_target_user_status_request",
+            user_id=self.user_id,
+            content={"target_user_id": self.target_user_id}
+        )
+        target_user_status_response = asyncio.Future()
+        self.futures["target_user_status_response"] = target_user_status_response
+        await self.websocket.send(get_target_user_status_request.json_string)
 
-    #     target_user_status_response = await target_user_status_response
-    #     del self.futures["target_user_status_response"]
+        target_user_status_response = await target_user_status_response
+        del self.futures["target_user_status_response"]
 
-    #     print(f"Target user status response received: {target_user_status_response}")
-    #     self.is_target_user_online = target_user_status_response.content["target_user_status"]
+        print(f"Target user status response received: {target_user_status_response}")
+        self.is_target_user_online = target_user_status_response.content["target_user_status"]
 
     async def connect_to_server(self, public_key: str) -> None:
         """
@@ -514,21 +522,20 @@ class Connection:
         self.local_connection_initiated.set()
         await asyncio.sleep(0.01)
 
+        await self.__update_target_user_status()
+
         if self.is_p2p_connected.is_set() or self.is_p2p_connection_failed:
             return
 
         if not self.is_connected_websocket:
             await self.connect_to_server(public_key)
 
-        # if self.connection_type == "server_connection":
-        #     return
-
         if self.p2p_connection_state == "connecting":
             try:
                 await asyncio.wait_for(self.is_p2p_connected.wait(), 10)
             except asyncio.TimeoutError:
                 print("Connection timeout in connection.connect().")
-                self.is_p2p_connected = False
+                self.is_p2p_connected.clear()
                 self.p2p_connection_state = "disconnected"
 
         public_key = await self.connect_to_peer()
@@ -554,6 +561,8 @@ class Chat:
         self.__long_term_encryptinon = Encryption()
         self.__long_term_encryptinon.load_long_term_keys()
         print(f"Long term public key: {self.__long_term_encryptinon.public_key}")
+
+        self.is_opened = asyncio.Event()
 
     async def __save_message_to_db(self, message: Message) -> None:
         """Saves message to the database"""
@@ -611,6 +620,7 @@ class Chat:
 
     async def __send_message_to_server(self, message: Message, encryption: str):
         message_json = message.json_string
+        print(f"Encription: {encryption}")
         if encryption == "long_term_public_key":
             encrypted_message = self.__long_term_encryptinon.encrypt(message_json)
         else:
@@ -694,11 +704,13 @@ class Chat:
         self.__long_term_encryptinon.set_peer_public_key(long_term_public_key_response.content["long_term_public_key"])
 
         self.__connection.websocket = websocket
+
         try:
             # get_message_task = asyncio.create_task(self.__message_loop())
             send_message_task = asyncio.create_task(self.__send_message_loop())
             receive_message_task = asyncio.create_task(self.__on_message_received())
             connect_to_server_task = asyncio.create_task(self.__connection.connect_to_server(self.__encryption.public_key))
+            self.is_opened.set()
 
             await asyncio.gather(connect_to_server_task, receive_message_task, send_message_task)
         finally:
@@ -721,12 +733,14 @@ class Chat:
 
     def send_message(self, message: str):
         """Sends message to the target user"""
-        self.__send_message_queue.put_nowait(Message(
-                                        message_type="message",
-                                        content=message,
-                                        user_id=self.user_id,
-                                        target_user_id=self.target_user_id
-                                        ))
+        message = Message(
+                    message_type="message",
+                    content=message,
+                    user_id=self.user_id,
+                    target_user_id=self.target_user_id
+                    )
+        self.__send_message_queue.put_nowait(message)
+        print(message)
 
 
 
@@ -752,6 +766,8 @@ class App:
         # Create FastAPI instance
         self.api = FastAPI()
         self.user_id = None
+
+        self.__chats_loaded = False
         
         # Create a separate router for API endpoints FIRST
         self.api_router = APIRouter(prefix="/api")
@@ -760,7 +776,7 @@ class App:
         self.__messages = {}  # Format: {target_user_id: [messages]}
         
         # User ID event to signal when user ID is set
-        self.__user_id_set = asyncio.Event()
+        self.__user_id_set = threading.Event()
         
         # Setup API routes BEFORE including router
         self.__setup_api_routes()
@@ -798,6 +814,7 @@ class App:
                 print(f"Login attempt with user_id: {user_id}")
                 self.user_id = user_id
                 self.__user_id_set.set()
+                print("Login successful")
                 return {"status": "success", "user_id": user_id}
             except Exception as e:
                 print(f"Login error: {e}")
@@ -807,6 +824,7 @@ class App:
         async def get_messages(user_id: str, target_user_id: str):
             # Validate the user
             if user_id != self.user_id:
+                print(f"⚠️ User mismatch: {user_id} vs {self.user_id}")
                 raise HTTPException(status_code=403, detail="Unauthorized access")
 
             # Return messages for this chat
@@ -845,6 +863,10 @@ class App:
             # Return list of all users with whom the current user has chats
             return list(self.__chats.keys())
 
+        @self.api_router.get("/chats_loaded")
+        async def chats_loaded():
+            return {"loaded": self.__chats_loaded}
+
         @self.api_router.get("/get_chats/{user_id}")
         async def get_chats(user_id: str):
             # Validate if the requested user_id matches the app's user_id
@@ -852,8 +874,8 @@ class App:
                 raise HTTPException(status_code=403, detail="Unauthorized access")
 
             # Return all chat users for the current user
-            chats = [id for id, chat in self.__chats.items() if chat.user_id == user_id]
-            return chats
+            # chats = [id for id, chat in self.__chats.items() if chat.user_id != user_id]
+            return list(self.__chats.keys())
 
         @self.api_router.post("/add_chat")
         async def add_chat(data: ChatRequest):
@@ -963,7 +985,7 @@ class App:
         print("Waiting for user login...")
 
         # Wait for user ID to be set from the frontend
-        await self.__user_id_set.wait()
+        self.__user_id_set.wait()
         print(f"User logged in: {self.user_id}")
 
         # Getting and initializing chats
@@ -981,6 +1003,12 @@ class App:
 
         for chat in self.__chats.values():
             asyncio.create_task(chat.open())
+
+        if self.__chats:
+            await asyncio.gather(*[chat.is_opened.wait() for chat in self.__chats.values()])
+        print("All chats are opened")
+
+        self.__chats_loaded = True
 
         while True:
             await asyncio.sleep(1)

@@ -32,6 +32,8 @@ services:
       DATABASE_URL_CLIENT: "${DATABASE_URL_CLIENT}"
     ports:
       - "8000:8000"
+      - "19302:19302/udp"
+    # network_mode: host
     depends_on:
       - user_database
     volumes:

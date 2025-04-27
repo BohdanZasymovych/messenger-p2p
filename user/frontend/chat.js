@@ -21,21 +21,27 @@ function login() {
     return res.json();
   })
   .then(data => {
-    // Set userId and store in localStorage for persistent login
-    userId = enteredId;
-    // localStorage.setItem('chatUserId', userId);
-    
-    // Hide login overlay
-    document.getElementById("loginOverlay").style.display = "none";
-    
-    // Show chat interface
-    document.querySelector(".sidebar").style.display = "block";
-    document.querySelector(".chat-window").style.display = "block";
-    document.querySelector(".map-button").style.display = "block";
-    
-    // Load chat data
-    loadChats();
-    loadRegisteredUsers();
+    userId = String(enteredId);
+    console.log("Login successful, waiting for backend initialization...");
+
+    setTimeout(() => {
+      // Hide login overlay
+      document.getElementById("loginOverlay").style.display = "none";
+      // Show chat interface
+      document.querySelector(".sidebar").style.display = "block";
+      document.querySelector(".chat-window").style.display = "block";
+      document.querySelector(".map-button").style.display = "block";
+
+      (async () => {
+        const ok = await waitForChatsLoaded();
+        if (!ok) {
+          alert("Server didn’t finish loading chats in time, please try again.");
+          return;
+        }
+        await loadChats();
+        await loadRegisteredUsers();
+      })();
+    }, 1000);
   })
   .catch(error => {
     console.error("Login error:", error);
@@ -173,42 +179,62 @@ function handleKeyPress(event) {
   if (event.key === "Enter") sendMessage();
 }
 
+async function waitForChatsLoaded() {
+  const maxAttempts = 20;  // Maximum wait time = 10 seconds
+  
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const res = await fetch('/api/chats_loaded');
+    const data = await res.json();
+    
+    if (data.loaded) {
+      console.log("Chats loaded successfully");
+      return true;
+    }
+    
+    console.log(`Waiting for chats to load (attempt ${attempt + 1}/${maxAttempts})...`);
+    // Wait 500ms before trying again
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  
+  console.warn("Timed out waiting for chats to load");
+  return false;
+}
+
 async function loadChats() {
-  // Get actual chats from the backend instead of using testChatUserIds
+  // Add loading indicator
+  document.getElementById("chatList").innerHTML = '<li class="loading">Loading chats...</li>';
+
+  // Now fetch the chats that should be loaded
   const res = await fetch(`/api/get_chats/${userId}`);
   if (!res.ok) {
+    document.getElementById("chatList").innerHTML = '<li class="error">Failed to load chats</li>';
     console.error("Failed to load chats");
     return;
   }
-  
+
   const chatUserIds = await res.json();
-  
-  // If no chats, show empty state
+  console.log("Received chat IDs:", chatUserIds);
+  document.getElementById("chatList").innerHTML = '';
+
   if (chatUserIds.length === 0) {
-    document.getElementById("chatWith").textContent = "No chats yet. Add a chat to get started!";
+    const chatList = document.getElementById("chatList");
+    // show a placeholder in the sidebar
+    chatList.innerHTML = '<li class="empty">No chats yet. Add a chat to get started!</li>';
+    // clear the chat header
+    document.getElementById("chatWith").textContent = "";
     return;
   }
-  
-  // Add each chat to the UI
+
   for (const targetId of chatUserIds) {
     addChatToUI(targetId);
-    
-    // Try to load messages for this chat
-    const msgRes = await fetch(`/api/get_messages/${userId}/${targetId}`);
-    if (!msgRes.ok) continue;
-    const messages = await msgRes.json();
-    
-    // If no active chat yet, make this the active chat
-    if (!currentTargetUserId) {
-      currentTargetUserId = targetId;
-      document.getElementById("chatWith").textContent = targetId;
-      document.getElementById("messages").innerHTML = "";
-      messages.forEach(msg => {
-        const bubble = document.createElement("div");
-        bubble.classList.add("message", msg.sender === "me" ? "sent" : "received");
-        bubble.textContent = msg.text;
-        document.getElementById("messages").appendChild(bubble);
-      });
+    try {
+      const msgRes = await fetch(`/api/get_messages/${userId}/${targetId}`);
+      if (!msgRes.ok) continue;
+      if (!currentTargetUserId) {
+        await openChat(targetId);
+      }
+    } catch (error) {
+      console.error(`Failed to load messages for ${targetId}:`, error);
     }
   }
 }
@@ -220,29 +246,15 @@ async function loadRegisteredUsers() {
 }
 
 window.onload = () => {
-  // Check if we have a userId stored in localStorage (optional persistent login)
-  const storedUserId = localStorage.getItem('chatUserId');
+  document.getElementById("loginOverlay").style.display = "flex";
   
-  if (storedUserId) {
-    // If we have a stored userId, use it and skip login
-    userId = storedUserId;
-    document.getElementById("loginOverlay").style.display = "none";
-    
-    // Load chats with the stored userId
-    loadChats();
-    loadRegisteredUsers();
-  } else {
-    // No stored userId, show login screen
-    document.getElementById("loginOverlay").style.display = "flex";
-    
-    // Hide the main chat interface elements
-    document.querySelector(".sidebar").style.display = "none";
-    document.querySelector(".chat-window").style.display = "none";
-    document.querySelector(".map-button").style.display = "none";
-    
-    // Set up login button event (if not already set in HTML)
-    document.querySelector("#loginOverlay button").onclick = login;
-  }
+  // Hide the main chat interface elements
+  document.querySelector(".sidebar").style.display = "none";
+  document.querySelector(".chat-window").style.display = "none";
+  document.querySelector(".map-button").style.display = "none";
+  
+  // Set up login button event (if not already set in HTML)
+  document.querySelector("#loginOverlay button").onclick = login;
   
   // Pre-fill the login field with a test ID for easier testing (optional)
   if (!storedUserId) {
