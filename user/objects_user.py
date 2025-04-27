@@ -731,17 +731,10 @@ class Chat:
     #             await self.__save_message_to_db(message)
     #             self.__send_message_queue.put_nowait(message)
 
-    def send_message(self, message: str):
+    def send_message(self, message: Message):
         """Sends message to the target user"""
-        message = Message(
-                    message_type="message",
-                    content=message,
-                    user_id=self.user_id,
-                    target_user_id=self.target_user_id
-                    )
         self.__send_message_queue.put_nowait(message)
         print(message)
-
 
 
 class LoginRequest(BaseModel):
@@ -950,6 +943,11 @@ class App:
     def send_message(self, target_user_id: str, message: str):
         """Sends message to the target user"""
         if target_user_id in self.__chats:
+            message = Message(message_type="message",
+                            content=message,
+                            user_id=self.user_id,
+                            target_user_id=target_user_id
+                        )
             self.__chats[target_user_id].send_message(message)
         else:
             raise ValueError(f"Chat with {target_user_id} not found.")
