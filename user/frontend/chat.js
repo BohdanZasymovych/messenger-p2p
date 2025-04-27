@@ -105,8 +105,24 @@ async function openChat(targetUserId) {
     const bubble = document.createElement("div");
     bubble.classList.add("message", msg.sender === "me" ? "sent" : "received");
     bubble.textContent = msg.text;
+    
+    if (msg.timestamp) {
+      const timeEl = document.createElement("div");
+      timeEl.classList.add("message-time");
+      
+      const date = new Date(msg.timestamp);
+      const timeString = date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+      
+      timeEl.textContent = timeString;
+      bubble.appendChild(timeEl);
+    }
+    
     document.getElementById("messages").appendChild(bubble);
   });
+  
+  // Прокручуємо до останнього повідомлення
+  const messagesContainer = document.getElementById("messages");
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
 async function sendMessage() {
@@ -114,6 +130,8 @@ async function sendMessage() {
   const messageText = input.value.trim();
   if (!messageText || !currentTargetUserId) return;
 
+  const timestamp = new Date().toISOString();
+  
   const res = await fetch("/api/send_message", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -121,22 +139,27 @@ async function sendMessage() {
       user_id: userId,
       target_user_id: currentTargetUserId,
       text: messageText,
-      timestamp: new Date().toISOString()
+      timestamp: timestamp
     })
-  
   });
 
   if (res.ok) {
     const bubble = document.createElement("div");
     bubble.classList.add("message", "sent");
     bubble.textContent = messageText;
+    
+    const timeEl = document.createElement("div");
+    timeEl.classList.add("message-time");
+    const timeString = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    timeEl.textContent = timeString;
+    bubble.appendChild(timeEl);
+    
     document.getElementById("messages").appendChild(bubble);
     input.value = "";
     
-    // Scroll to the bottom after sending
     const messagesContainer = document.getElementById("messages");
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
-}
+  }
 }
 
 function startMessagePolling() {
@@ -162,34 +185,35 @@ async function fetchNewMessages(targetUserId) {
   if (!res.ok) return;
   const messages = await res.json();
 
-  // we only want to append *truly new* messages
-  // so count what’s already in memory
   const existingCount = (targetUserId === currentTargetUserId)
-    // only count in the visible container
     ? document.querySelectorAll('#messages .message').length
-    : (document.querySelectorAll(
-         `#chatList li[data-user-id="${targetUserId}"] .badge`
-       ).length || 0);
+    : 0;
 
   if (messages.length <= existingCount) return;
 
   const newMsgs = messages.slice(existingCount);
 
   if (targetUserId === currentTargetUserId) {
-    // if it’s the open chat, render into the pane
     const container = document.getElementById('messages');
     newMsgs.forEach(msg => {
       const bubble = document.createElement("div");
       bubble.classList.add("message", msg.sender === "me" ? "sent" : "received");
       bubble.textContent = msg.text;
+      
+      if (msg.timestamp) {
+        const timeEl = document.createElement("div");
+        timeEl.classList.add("message-time");
+        const date = new Date(msg.timestamp);
+        const timeString = date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        timeEl.textContent = timeString;
+        bubble.appendChild(timeEl);
+      }
+      
       container.appendChild(bubble);
     });
     container.scrollTop = container.scrollHeight;
   } else {
-    // otherwise mark the chat in the sidebar with a little badge
-    let li = document.querySelector(
-      `#chatList li[data-user-id="${targetUserId}"]`
-    );
+    let li = document.querySelector(`#chatList li[data-user-id="${targetUserId}"]`);
     if (li && !li.querySelector('.badge')) {
       const badge = document.createElement('span');
       badge.classList.add('badge');
