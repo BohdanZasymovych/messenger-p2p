@@ -72,7 +72,7 @@
     <ul class="chat-list" id="chatList"></ul>
   </div>
 
-  <div class="chat-window">
+  <div class="chat-window" id="chatWindow">
     <div class="chat-header">
       <img src="photos/budanov.jpg" alt="Contact">
       <div class="contact-info" id="chatWith">Select a chat</div>
@@ -83,7 +83,7 @@
     </div>
 
     <div class="messages" id="messages"></div>
-    <div class="input-bar">
+    <div class="input-bar" id="inputBar">
       <input type="text" id="messageInput" placeholder="Type smth..." onkeypress="handleKeyPress(event)">
       <button onclick="sendMessage()">Send</button>
     </div>

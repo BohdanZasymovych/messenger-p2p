@@ -1,7 +1,6 @@
 let userId = null;
 let currentTargetUserId = null;
 
-
 function login() {
   const enteredId = document.getElementById("loginUserId").value.trim();
   if (!enteredId) {
@@ -29,13 +28,12 @@ function login() {
       document.getElementById("loginOverlay").style.display = "none";
       // Show chat interface
       document.querySelector(".sidebar").style.display = "block";
-      document.querySelector(".chat-window").style.display = "block";
       document.querySelector(".map-button").style.display = "block";
 
       (async () => {
         const ok = await waitForChatsLoaded();
         if (!ok) {
-          alert("Server didn’t finish loading chats in time, please try again.");
+          alert("Server didn't finish loading chats in time, please try again.");
           return;
         }
         await loadChats();
@@ -64,6 +62,10 @@ async function createChat() {
     });
     
     if (res.ok) {
+      // Show the chat interface if it was hidden
+      document.getElementById("chatWindow").style.display = "flex"; // Changed to flex
+      document.getElementById("inputBar").style.display = "flex"; // Show input bar
+      
       // Add the chat to UI
       addChatToUI(targetUserId);
       
@@ -72,6 +74,9 @@ async function createChat() {
       
       // Open the newly created chat
       await openChat(targetUserId);
+      
+      // Focus the message input
+      document.getElementById("messageInput").focus();
     } else {
       const error = await res.json();
       alert(`Failed to create chat: ${error.detail || 'Unknown error'}`);
@@ -107,6 +112,10 @@ async function openChat(targetUserId) {
     bubble.textContent = msg.text;
     document.getElementById("messages").appendChild(bubble);
   });
+
+  // Scroll to the bottom when opening a chat
+  const messagesContainer = document.getElementById("messages");
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
 async function sendMessage() {
@@ -123,7 +132,6 @@ async function sendMessage() {
       text: messageText,
       timestamp: new Date().toISOString()
     })
-  
   });
 
   if (res.ok) {
@@ -136,7 +144,7 @@ async function sendMessage() {
     // Scroll to the bottom after sending
     const messagesContainer = document.getElementById("messages");
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
-}
+  }
 }
 
 function startMessagePolling() {
@@ -163,7 +171,7 @@ async function fetchNewMessages(targetUserId) {
   const messages = await res.json();
 
   // we only want to append *truly new* messages
-  // so count what’s already in memory
+  // so count what's already in memory
   const existingCount = (targetUserId === currentTargetUserId)
     // only count in the visible container
     ? document.querySelectorAll('#messages .message').length
@@ -176,7 +184,7 @@ async function fetchNewMessages(targetUserId) {
   const newMsgs = messages.slice(existingCount);
 
   if (targetUserId === currentTargetUserId) {
-    // if it’s the open chat, render into the pane
+    // if it's the open chat, render into the pane
     const container = document.getElementById('messages');
     newMsgs.forEach(msg => {
       const bubble = document.createElement("div");
@@ -242,21 +250,22 @@ async function loadChats() {
 
   if (chatUserIds.length === 0) {
     const chatList = document.getElementById("chatList");
-    // show a placeholder in the sidebar
     chatList.innerHTML = '<li class="empty">No chats yet. Add a chat to get started!</li>';
-    // clear the chat header
+    document.getElementById("chatWindow").style.display = "none";
+    document.getElementById("inputBar").style.display = "none";
     document.getElementById("chatWith").textContent = "";
     return;
   }
+
+  // Show the chat interface if we have chats
+  document.getElementById("chatWindow").style.display = "flex"; // Changed to flex
+  document.getElementById("inputBar").style.display = "flex"; // Show input bar
 
   for (const targetId of chatUserIds) {
     addChatToUI(targetId);
     try {
       const msgRes = await fetch(`/api/get_messages/${userId}/${targetId}`);
       if (!msgRes.ok) continue;
-      // if (!currentTargetUserId) {
-      //   await openChat(targetId);
-      // }
     } catch (error) {
       console.error(`Failed to load messages for ${targetId}:`, error);
     }
@@ -266,7 +275,7 @@ async function loadChats() {
 async function loadRegisteredUsers() {
   const res = await fetch("/api/users");
   const users = await res.json();
-  console.log("Registered users:", users); // 👉 можна виводити в UI
+  console.log("Registered users:", users);
 }
 
 window.onload = () => {
@@ -274,7 +283,8 @@ window.onload = () => {
   
   // Hide the main chat interface elements
   document.querySelector(".sidebar").style.display = "none";
-  document.querySelector(".chat-window").style.display = "none";
+  document.getElementById("chatWindow").style.display = "none";
+  document.getElementById("inputBar").style.display = "none";
   document.querySelector(".map-button").style.display = "none";
   
   // Set up login button event (if not already set in HTML)
