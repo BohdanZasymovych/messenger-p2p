@@ -47,14 +47,11 @@ class User:
     """Class that represents user on the server side"""
     def __init__(self, websocket=None):
         self.is_online = False # Indicates if user is connected to the server
-        self.websocket = websocket
 
         # Websocket which is used to comunicate with the server for entire app
         self.main_websocket = None
         # Websockets which are used to comunicate with other users in chats
         self.websockets = {} #  chat with target_user_id: websocket
-
-        self.role = None
 
         self.pending_users = set() # User waiting for you
         self.pended_users = set() # User you are waiting for
@@ -65,7 +62,6 @@ class User:
     def disconnect(self):
         """Sets user to default disconnected state"""
         self.is_online = False
-        self.role = None
         self.pended_users = set()
         self.main_websocket = None
         self.websockets = {}
@@ -263,7 +259,6 @@ class Server:
             )
             await websocket.send(register_response.json_string)
             print(f"Connection establishment request sent: {register_response.json_string}")
-            client.role = "answer"
 
             connection_establishment_request = Request(
                 request_type="connection_establishment_request",
@@ -271,7 +266,6 @@ class Server:
             )
             await target_client.websockets[user_id].send(connection_establishment_request.json_string)
             print(f"Connection establishment request sent: {connection_establishment_request.json_string}")
-            target_client.role = "offer"
 
         elif target_client.is_online:
             register_response = Request(
@@ -312,7 +306,6 @@ class Server:
 
             await target_client.websockets[user_id].send(connection_establishment_request.json_string)
             print(f"Connection establishment request sent to answerer: {connection_establishment_request}")
-            target_client.role = "answer"
 
             connection_response = Request(
                 request_type="connection_response",
@@ -322,7 +315,6 @@ class Server:
             )
             await websocket.send(connection_response.json_string)
             print(f"Connection establishment request sent to offerer: {connection_response}")
-            target_client.role = "offer"
 
         else:
             target_client.is_pended = True

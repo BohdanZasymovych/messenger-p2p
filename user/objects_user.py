@@ -58,6 +58,8 @@ ICE_CONFIG = RTCConfiguration(
     iceServers=ICE_SERVERS
 )
 
+SERVER_URL = "ws://messenger_server:9000"
+
 class IncorrectRequestTypeError(Exception):
     """Exception which is raised when request with incorrect type is received"""
 
@@ -439,7 +441,7 @@ class Connection:
         and waits in case connection request received
         """
         if self.websocket is None:
-            websocket = await websockets.connect(self.SERVER_URL)
+            websocket = await websockets.connect(SERVER_URL)
             self.websocket = websocket
 
         register_request = Request(
@@ -823,8 +825,9 @@ class App:
         # Create FastAPI instance
         self.api = FastAPI()
         self.user_id = None
-
+        self.websocket = None
         self.__chats_loaded = False
+        self.__password = None
 
         # Create a separate router for API endpoints FIRST
         self.api_router = APIRouter(prefix="/api")
@@ -1023,7 +1026,7 @@ class App:
 
         print(f"Chats from database: {chats}")
         return [chat["target_user_id"] for chat in chats]
-    
+
     def send_message(self, target_user_id: str, message: str):
         """Sends message to the target user"""
         if target_user_id in self.__chats:
@@ -1051,6 +1054,14 @@ class App:
 
         print(f"Received message from {target_user_id}: {message_text}")
 
+    async def __login(self):
+        """Login do the app and set user_id and password attributes in case of success"""
+        pass
+
+    async def __session(self):
+        """Session function which is called when user is logged in"""
+        pass
+
     async def open(self):
         # Start the API server
         def start_server():
@@ -1063,31 +1074,13 @@ class App:
         print("API server started on http://localhost:8000")
         print("Waiting for user login...")
 
+        self.websocket = await websockets.connect(SERVER_URL)
+
         # Wait for user ID to be set from the frontend
         self.__user_id_set.wait()
         print(f"User logged in: {self.user_id}")
 
-        # Getting and initializing chats
-        target_user_ids = await self.__get_chats_from_db()
-        for target_user_id in target_user_ids:
-            if target_user_id == self.user_id:
-                continue
-            chat = Chat(
-                user_id=self.user_id,
-                target_user_id=target_user_id,
-                on_message_callback=self.on_message_received)
-            self.__chats[target_user_id] = chat
-            print(f"Chat loaded: {chat.target_user_id}")
-        print(f"All chats loaded: {self.__chats}")
-
-        for chat in self.__chats.values():
-            asyncio.create_task(chat.open())
-
-        if self.__chats:
-            await asyncio.gather(*[chat.is_opened.wait() for chat in self.__chats.values()])
-        print("All chats are opened")
-
-        self.__chats_loaded = True
+        await self.__session()
 
         while True:
             await asyncio.sleep(1)
