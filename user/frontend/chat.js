@@ -155,14 +155,13 @@ function formatDate(date) {
   return date.toLocaleDateString('en-US', options);
 }
 
-
 async function sendMessage() {
   const input = document.getElementById("messageInput");
   const messageText = input.value.trim();
   if (!messageText || !currentTargetUserId) return;
 
   const timestamp = new Date().toISOString();
-  
+
   const res = await fetch("/api/send_message", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -177,31 +176,41 @@ async function sendMessage() {
   if (res.ok) {
     const now = new Date();
     const dateStr = formatDate(now);
-    
-    const lastDivider = document.querySelector(".date-divider:last-of-type");
-    const needsNewDivider = !lastDivider || lastDivider.textContent !== dateStr;
-    
-    if (needsNewDivider) {
+    const messagesContainer = document.getElementById("messages");
+    const lastMessage = messagesContainer.lastElementChild;
+    let lastMessageDateStr = null;
+
+    if (lastMessage && lastMessage.classList.contains("date-divider")) {
+      lastMessageDateStr = lastMessage.textContent;
+    } else if (lastMessage && lastMessage.querySelector(".message-time")) {
+      // Отримуємо дату з часу останнього повідомлення
+      const lastMessageTimeElement = lastMessage.querySelector(".message-time");
+      const lastMessageDateTime = new Date();
+      const timeParts = lastMessageTimeElement.textContent.split(':');
+      lastMessageDateTime.setHours(parseInt(timeParts[0], 10));
+      lastMessageDateTime.setMinutes(parseInt(timeParts[1], 10));
+      lastMessageDateStr = formatDate(lastMessageDateTime);
+    }
+
+    if (lastMessageDateStr !== dateStr) {
       const dateDiv = document.createElement("div");
       dateDiv.classList.add("date-divider");
       dateDiv.textContent = dateStr;
-      document.getElementById("messages").appendChild(dateDiv);
+      messagesContainer.appendChild(dateDiv);
     }
-    
+
     const bubble = document.createElement("div");
     bubble.classList.add("message", "sent");
     bubble.textContent = messageText;
-    
+
     const timeEl = document.createElement("div");
     timeEl.classList.add("message-time");
-    const timeString = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     timeEl.textContent = timeString;
     bubble.appendChild(timeEl);
-    
-    document.getElementById("messages").appendChild(bubble);
+
+    messagesContainer.appendChild(bubble);
     input.value = "";
-    
-    const messagesContainer = document.getElementById("messages");
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
   }
 }
