@@ -24,12 +24,12 @@ services:
     tty: true
     environment:
       DATABASE_URL_CLIENT: "${DATABASE_URL_CLIENT}"
-    # sysctls:
-    #   net.ipv4.ip_local_port_range: "40000 40100"
+    sysctls:
+      net.ipv4.ip_local_port_range: "40000 40100"
     ports:
       - "8000:8000"
       - "19302:19302/udp"
-      # - "40000-40100:40000-40100/udp"
+      - "40000-40100:40000-40100/udp"
     # network_mode: "host"
     depends_on:
       - user_database
