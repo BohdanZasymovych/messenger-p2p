@@ -397,10 +397,15 @@ class Server:
         target_user_id = data["target_user_id"]
         websocket = self.__clients[user_id].websockets[target_user_id]
 
+        target_user_status = self.__clients[target_user_id].is_online
+        target_user_public_key = None
+        if target_user_status:
+            target_user_public_key = self.__clients[target_user_id].public_keys[user_id]
+
         target_user_status_request = Request(
             request_type="target_user_status_response",
-            content={"target_user_status": self.__clients[target_user_id].is_online,
-                    "public_key": self.__clients[target_user_id].public_keys[user_id]}
+            content={"target_user_status": target_user_status,
+                    "public_key": target_user_public_key}
         )
         await websocket.send(target_user_status_request.json_string)
         print(f"Target user status request sent: {target_user_status_request.json_string}")
