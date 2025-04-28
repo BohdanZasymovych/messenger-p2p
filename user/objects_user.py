@@ -1074,7 +1074,7 @@ class App:
         print("API server started on http://localhost:8000")
         print("Waiting for user login...")
 
-        self.websocket = await websockets.connect(SERVER_URL)
+        # self.websocket = await websockets.connect(SERVER_URL)
 
         # Wait for user ID to be set from the frontend
         self.__user_id_set.wait()
