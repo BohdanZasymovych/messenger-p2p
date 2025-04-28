@@ -1,5 +1,7 @@
 let userId = null;
 let currentTargetUserId = null;
+const lastMessageTimestamps = {};
+const lastMessageDates = {};
 
 function login() {
   const enteredId = document.getElementById("loginUserId").value.trim();
@@ -100,9 +102,17 @@ async function openChat(targetUserId) {
   currentTargetUserId = targetUserId;
   document.getElementById("chatWith").textContent = targetUserId;
   document.getElementById("messages").innerHTML = "";
+  
+  lastMessageTimestamps[targetUserId] = null;
+  lastMessageDates[targetUserId] = null;
 
   const res = await fetch(`/api/get_messages/${userId}/${targetUserId}`);
   const messages = await res.json();
+
+  if (messages.length > 0) {
+    const lastMsg = messages[messages.length - 1];
+    lastMessageTimestamps[targetUserId] = lastMsg.timestamp;
+  }
 
   let currentDate = null;
   
@@ -116,6 +126,7 @@ async function openChat(targetUserId) {
       dateDiv.textContent = dateStr;
       document.getElementById("messages").appendChild(dateDiv);
       currentDate = dateStr;
+      lastMessageDates[targetUserId] = dateStr;
     }
     
     const bubble = document.createElement("div");
@@ -135,7 +146,57 @@ async function openChat(targetUserId) {
 
   const messagesContainer = document.getElementById("messages");
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  
+  const chatListItem = document.querySelector(`#chatList li[data-user-id="${targetUserId}"]`);
+  const badge = chatListItem?.querySelector('.badge');
+  if (badge) {
+    badge.remove();
+  }
+
+  document.getElementById("chatWindow").style.display = "flex";
+  document.getElementById("inputBar").style.display = "flex";
 }
+
+// async function openChat(targetUserId) {
+//   currentTargetUserId = targetUserId;
+//   document.getElementById("chatWith").textContent = targetUserId;
+//   document.getElementById("messages").innerHTML = "";
+
+//   const res = await fetch(`/api/get_messages/${userId}/${targetUserId}`);
+//   const messages = await res.json();
+
+//   let currentDate = null;
+  
+//   messages.forEach(msg => {
+//     const msgDate = new Date(msg.timestamp);
+//     const dateStr = formatDate(msgDate);
+    
+//     if (dateStr !== currentDate) {
+//       const dateDiv = document.createElement("div");
+//       dateDiv.classList.add("date-divider");
+//       dateDiv.textContent = dateStr;
+//       document.getElementById("messages").appendChild(dateDiv);
+//       currentDate = dateStr;
+//     }
+    
+//     const bubble = document.createElement("div");
+//     bubble.classList.add("message", msg.sender === "me" ? "sent" : "received");
+//     bubble.textContent = msg.text;
+    
+//     if (msg.timestamp) {
+//       const timeEl = document.createElement("div");
+//       timeEl.classList.add("message-time");
+//       const timeString = msgDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+//       timeEl.textContent = timeString;
+//       bubble.appendChild(timeEl);
+//     }
+    
+//     document.getElementById("messages").appendChild(bubble);
+//   });
+
+//   const messagesContainer = document.getElementById("messages");
+//   messagesContainer.scrollTop = messagesContainer.scrollHeight;
+// }
 
 
 function formatDate(date) {
@@ -160,43 +221,35 @@ async function sendMessage() {
   const messageText = input.value.trim();
   if (!messageText || !currentTargetUserId) return;
 
-  const timestamp = new Date().toISOString();
+  const now = new Date();
+  const timestamp = now.toISOString();
 
-  const res = await fetch("/api/send_message", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      user_id: userId,
-      target_user_id: currentTargetUserId,
-      text: messageText,
-      timestamp: timestamp
-    })
-  });
+  try {
+    const res = await fetch("/api/send_message", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: userId,
+        target_user_id: currentTargetUserId,
+        text: messageText,
+        timestamp: timestamp
+      })
+    });
 
-  if (res.ok) {
-    const now = new Date();
-    const dateStr = formatDate(now);
-    const messagesContainer = document.getElementById("messages");
-    const lastMessage = messagesContainer.lastElementChild;
-    let lastMessageDateStr = null;
-
-    if (lastMessage && lastMessage.classList.contains("date-divider")) {
-      lastMessageDateStr = lastMessage.textContent;
-    } else if (lastMessage && lastMessage.querySelector(".message-time")) {
-      // Отримуємо дату з часу останнього повідомлення
-      const lastMessageTimeElement = lastMessage.querySelector(".message-time");
-      const lastMessageDateTime = new Date();
-      const timeParts = lastMessageTimeElement.textContent.split(':');
-      lastMessageDateTime.setHours(parseInt(timeParts[0], 10));
-      lastMessageDateTime.setMinutes(parseInt(timeParts[1], 10));
-      lastMessageDateStr = formatDate(lastMessageDateTime);
+    if (!res.ok) {
+      console.error("Error sending message");
+      return;
     }
 
-    if (lastMessageDateStr !== dateStr) {
+    const dateStr = formatDate(now);
+    const messagesContainer = document.getElementById("messages");
+    
+    if (dateStr !== lastMessageDates[currentTargetUserId]) {
       const dateDiv = document.createElement("div");
       dateDiv.classList.add("date-divider");
       dateDiv.textContent = dateStr;
       messagesContainer.appendChild(dateDiv);
+      lastMessageDates[currentTargetUserId] = dateStr;
     }
 
     const bubble = document.createElement("div");
@@ -211,9 +264,74 @@ async function sendMessage() {
 
     messagesContainer.appendChild(bubble);
     input.value = "";
+    
+    lastMessageTimestamps[currentTargetUserId] = timestamp;
+    
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  } catch (error) {
+    console.error("Error sending message:", error);
   }
 }
+
+// async function sendMessage() {
+//   const input = document.getElementById("messageInput");
+//   const messageText = input.value.trim();
+//   if (!messageText || !currentTargetUserId) return;
+
+//   const timestamp = new Date().toISOString();
+
+//   const res = await fetch("/api/send_message", {
+//     method: "POST",
+//     headers: { "Content-Type": "application/json" },
+//     body: JSON.stringify({
+//       user_id: userId,
+//       target_user_id: currentTargetUserId,
+//       text: messageText,
+//       timestamp: timestamp
+//     })
+//   });
+
+//   if (res.ok) {
+//     const now = new Date();
+//     const dateStr = formatDate(now);
+//     const messagesContainer = document.getElementById("messages");
+//     const lastMessage = messagesContainer.lastElementChild;
+//     let lastMessageDateStr = null;
+
+//     if (lastMessage && lastMessage.classList.contains("date-divider")) {
+//       lastMessageDateStr = lastMessage.textContent;
+//     } else if (lastMessage && lastMessage.querySelector(".message-time")) {
+//       // Отримуємо дату з часу останнього повідомлення
+//       const lastMessageTimeElement = lastMessage.querySelector(".message-time");
+//       const lastMessageDateTime = new Date();
+//       const timeParts = lastMessageTimeElement.textContent.split(':');
+//       lastMessageDateTime.setHours(parseInt(timeParts[0], 10));
+//       lastMessageDateTime.setMinutes(parseInt(timeParts[1], 10));
+//       lastMessageDateStr = formatDate(lastMessageDateTime);
+//     }
+
+//     if (lastMessageDateStr !== dateStr) {
+//       const dateDiv = document.createElement("div");
+//       dateDiv.classList.add("date-divider");
+//       dateDiv.textContent = dateStr;
+//       messagesContainer.appendChild(dateDiv);
+//     }
+
+//     const bubble = document.createElement("div");
+//     bubble.classList.add("message", "sent");
+//     bubble.textContent = messageText;
+
+//     const timeEl = document.createElement("div");
+//     timeEl.classList.add("message-time");
+//     const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+//     timeEl.textContent = timeString;
+//     bubble.appendChild(timeEl);
+
+//     messagesContainer.appendChild(bubble);
+//     input.value = "";
+//     messagesContainer.scrollTop = messagesContainer.scrollHeight;
+//   }
+// }
 
 function startMessagePolling() {
   setInterval(() => {
@@ -234,47 +352,121 @@ async function pollAllChats() {
 }
 
 async function fetchNewMessages(targetUserId) {
-  const res = await fetch(`/api/get_messages/${userId}/${targetUserId}`);
-  if (!res.ok) return;
-  const messages = await res.json();
-
-  const existingCount = (targetUserId === currentTargetUserId)
-    ? document.querySelectorAll('#messages .message').length
-    : 0;
-
-  if (messages.length <= existingCount) return;
-
-  const newMsgs = messages.slice(existingCount);
-
-  if (targetUserId === currentTargetUserId) {
-    const container = document.getElementById('messages');
-    newMsgs.forEach(msg => {
-      const bubble = document.createElement("div");
-      bubble.classList.add("message", msg.sender === "me" ? "sent" : "received");
-      bubble.textContent = msg.text;
+  if (!targetUserId || !userId) return;
+  
+  try {
+    // Використовуємо новий API endpoint, якщо є timestamp
+    const lastTimestamp = lastMessageTimestamps[targetUserId];
+    let url = `/api/get_messages/${userId}/${targetUserId}`;
+    
+    if (lastTimestamp) {
+      url = `/api/get_new_messages/${userId}/${targetUserId}/${encodeURIComponent(lastTimestamp)}`;
+    }
+    
+    const res = await fetch(url);
+    if (!res.ok) return;
+    
+    const messages = await res.json();
+    
+    if (messages.length === 0) return;
+    
+    // Оновлюємо timestamp останнього повідомлення
+    const lastMsg = messages[messages.length - 1];
+    lastMessageTimestamps[targetUserId] = lastMsg.timestamp;
+    
+    if (targetUserId === currentTargetUserId) {
+      // Якщо це активний чат, відображаємо нові повідомлення
+      const container = document.getElementById('messages');
       
-      if (msg.timestamp) {
-        const timeEl = document.createElement("div");
-        timeEl.classList.add("message-time");
-        const date = new Date(msg.timestamp);
-        const timeString = date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-        timeEl.textContent = timeString;
-        bubble.appendChild(timeEl);
+      for (const msg of messages) {
+        const msgDate = new Date(msg.timestamp);
+        const dateStr = formatDate(msgDate);
+        
+        // Додаємо роздільник дати, якщо потрібно
+        if (dateStr !== lastMessageDates[targetUserId]) {
+          const dateDiv = document.createElement("div");
+          dateDiv.classList.add("date-divider");
+          dateDiv.textContent = dateStr;
+          container.appendChild(dateDiv);
+          lastMessageDates[targetUserId] = dateStr;
+        }
+        
+        // Додаємо повідомлення
+        const bubble = document.createElement("div");
+        bubble.classList.add("message", msg.sender === "me" ? "sent" : "received");
+        bubble.textContent = msg.text;
+        
+        // Додаємо час
+        if (msg.timestamp) {
+          const timeEl = document.createElement("div");
+          timeEl.classList.add("message-time");
+          const timeString = msgDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+          timeEl.textContent = timeString;
+          bubble.appendChild(timeEl);
+        }
+        
+        container.appendChild(bubble);
       }
       
-      container.appendChild(bubble);
-    });
-    container.scrollTop = container.scrollHeight;
-  } else {
-    let li = document.querySelector(`#chatList li[data-user-id="${targetUserId}"]`);
-    if (li && !li.querySelector('.badge')) {
-      const badge = document.createElement('span');
-      badge.classList.add('badge');
-      badge.textContent = '•';
-      li.appendChild(badge);
+      // Прокручуємо до останнього повідомлення
+      container.scrollTop = container.scrollHeight;
+    } else {
+      // Якщо це неактивний чат, показуємо індикатор нових повідомлень
+      let li = document.querySelector(`#chatList li[data-user-id="${targetUserId}"]`);
+      if (li && !li.querySelector('.badge')) {
+        const badge = document.createElement('span');
+        badge.classList.add('badge');
+        badge.textContent = '•';
+        li.appendChild(badge);
+      }
     }
+  } catch (error) {
+    console.error("Error fetching new messages:", error);
   }
 }
+
+// async function fetchNewMessages(targetUserId) {
+//   const res = await fetch(`/api/get_messages/${userId}/${targetUserId}`);
+//   if (!res.ok) return;
+//   const messages = await res.json();
+
+//   const existingCount = (targetUserId === currentTargetUserId)
+//     ? document.querySelectorAll('#messages .message').length
+//     : 0;
+
+//   if (messages.length <= existingCount) return;
+
+//   const newMsgs = messages.slice(existingCount);
+
+//   if (targetUserId === currentTargetUserId) {
+//     const container = document.getElementById('messages');
+//     newMsgs.forEach(msg => {
+//       const bubble = document.createElement("div");
+//       bubble.classList.add("message", msg.sender === "me" ? "sent" : "received");
+//       bubble.textContent = msg.text;
+      
+//       if (msg.timestamp) {
+//         const timeEl = document.createElement("div");
+//         timeEl.classList.add("message-time");
+//         const date = new Date(msg.timestamp);
+//         const timeString = date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+//         timeEl.textContent = timeString;
+//         bubble.appendChild(timeEl);
+//       }
+      
+//       container.appendChild(bubble);
+//     });
+//     container.scrollTop = container.scrollHeight;
+//   } else {
+//     let li = document.querySelector(`#chatList li[data-user-id="${targetUserId}"]`);
+//     if (li && !li.querySelector('.badge')) {
+//       const badge = document.createElement('span');
+//       badge.classList.add('badge');
+//       badge.textContent = '•';
+//       li.appendChild(badge);
+//     }
+//   }
+// }
 
 function handleKeyPress(event) {
   if (event.key === "Enter") sendMessage();
