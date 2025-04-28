@@ -415,7 +415,7 @@ class Connection:
     #         await self.websocket.send(ping_request.json_string)
     #         await asyncio.sleep(1)
 
-    async def __update_target_user_status(self):
+    async def __update_target_user_status(self) -> str:
         """Updates target user status (online, offline) by sending get_target_user_status_request"""
         get_target_user_status_request = Request(
             request_type="get_target_user_status_request",
@@ -431,6 +431,7 @@ class Connection:
 
         print(f"Target user status response received: {target_user_status_response}")
         self.is_target_user_online = target_user_status_response.content["target_user_status"]
+        return target_user_status_response.content["public_key"]
 
     async def connect_to_server(self, public_key: str) -> None:
         """
@@ -464,8 +465,7 @@ class Connection:
                 return
             case "target_user_online":
                 self.is_target_user_online = True
-                peer_public_key = register_response.content["public_key"]
-                return peer_public_key
+                return
             case _:
                 raise IncorrectRequestTypeError("Incorrect response to register request.")
         return peer_public_key
@@ -517,10 +517,10 @@ class Connection:
         self.local_connection_initiated.set()
         await asyncio.sleep(0.01)
 
-        await self.__update_target_user_status()
+        peer_public_key = await self.__update_target_user_status()
 
         if self.is_p2p_connected.is_set() or self.is_p2p_connection_failed:
-            return
+            return peer_public_key
 
         if not self.is_connected_websocket:
             await self.connect_to_server(public_key)
@@ -534,8 +534,8 @@ class Connection:
                 self.p2p_connection_state = "disconnected"
                 self.is_p2p_connection_failed = True
 
-        public_key = await self.connect_to_peer()
-        return public_key
+        peer_public_key = await self.connect_to_peer()
+        return peer_public_key
 
 
 class Chat:
