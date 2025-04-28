@@ -404,22 +404,23 @@ class Connection:
     #         await self.websocket.send(ping_request.json_string)
     #         await asyncio.sleep(1)
 
-    # async def __update_target_user_status(self):
-    #     """Updates target user status (online, offline) by sending get_target_user_status_request"""
-    #     get_target_user_status_request = Request(
-    #         request_type="get_target_user_status_request",
-    #         user_id=self.user_id,
-    #         content={"target_user_id": self.target_user_id}
-    #     )
-    #     target_user_status_response = asyncio.Future()
-    #     self.futures["target_user_status_response"] = target_user_status_response
-    #     await self.websocket.send(get_target_user_status_request.json_string)
+    async def __update_target_user_status(self) -> str:
+        """Updates target user status (online, offline) by sending get_target_user_status_request"""
+        get_target_user_status_request = Request(
+            request_type="get_target_user_status_request",
+            user_id=self.user_id,
+            content={"target_user_id": self.target_user_id}
+        )
+        target_user_status_response = asyncio.Future()
+        self.futures["target_user_status_response"] = target_user_status_response
+        await self.websocket.send(get_target_user_status_request.json_string)
 
-    #     target_user_status_response = await target_user_status_response
-    #     del self.futures["target_user_status_response"]
+        target_user_status_response = await target_user_status_response
+        del self.futures["target_user_status_response"]
 
-    #     print(f"Target user status response received: {target_user_status_response}")
-    #     self.is_target_user_online = target_user_status_response.content["target_user_status"]
+        print(f"Target user status response received: {target_user_status_response}")
+        self.is_target_user_online = target_user_status_response.content["target_user_status"]
+        return target_user_status_response.content["public_key"]
 
     async def connect_to_server(self, public_key: str) -> None:
         """
@@ -453,8 +454,7 @@ class Connection:
                 return
             case "target_user_online":
                 self.is_target_user_online = True
-                peer_public_key = register_response.content["public_key"]
-                return peer_public_key
+                return
             case _:
                 raise IncorrectRequestTypeError("Incorrect response to register request.")
         return peer_public_key
@@ -506,25 +506,24 @@ class Connection:
         self.local_connection_initiated.set()
         await asyncio.sleep(0.01)
 
+        peer_public_key = await self.__update_target_user_status()
+
         if self.is_p2p_connected.is_set() or self.is_p2p_connection_failed:
-            return
+            return peer_public_key
 
         if not self.is_connected_websocket:
             await self.connect_to_server(public_key)
-
-        # if self.connection_type == "server_connection":
-        #     return
 
         if self.p2p_connection_state == "connecting":
             try:
                 await asyncio.wait_for(self.is_p2p_connected.wait(), 10)
             except asyncio.TimeoutError:
                 print("Connection timeout in connection.connect().")
-                self.is_p2p_connected = False
+                self.is_p2p_connected.clear()
                 self.p2p_connection_state = "disconnected"
 
-        public_key = await self.connect_to_peer()
-        return public_key
+        peer_public_key = await self.connect_to_peer()
+        return peer_public_key
 
 
 class Chat:
@@ -547,21 +546,21 @@ class Chat:
         self.__long_term_encryptinon.load_long_term_keys()
         print(f"Long term public key: {self.__long_term_encryptinon.public_key}")
 
-    async def __save_message_to_db(self, message: Message) -> None:
-        """Saves message to the database"""
-        user_id = message.user_id
-        target_user_id = message.target_user_id
-        message = message.content
+    # async def __save_message_to_db(self, message: Message) -> None:
+    #     """Saves message to the database"""
+    #     user_id = message.user_id
+    #     target_user_id = message.target_user_id
+    #     message = message.content
 
-        conn = await asyncpg.connect(self.DATABASE_URL)
-        try:
-            await conn.execute("""--sql
-                INSERT INTO messages (user_id, target_user_id, message)
-                VALUES ($1, $2, $3);
-            """, user_id, target_user_id, message)
-        finally:
-            await conn.close()
-        print(f"Message from {user_id} to {target_user_id} saved to database.")
+    #     conn = await asyncpg.connect(self.DATABASE_URL)
+    #     try:
+    #         await conn.execute("""--sql
+    #             INSERT INTO messages (user_id, target_user_id, message)
+    #             VALUES ($1, $2, $3);
+    #         """, user_id, target_user_id, message)
+    #     finally:
+    #         await conn.close()
+    #     print(f"Message from {user_id} to {target_user_id} saved to database.")
 
     # async def __get_messages_from_db(self, user_id: str, target_user_id: str) -> list:
     #     """Gets messages to specified user from the database"""
@@ -708,7 +707,7 @@ class Chat:
                     user_id=self.user_id,
                     target_user_id=self.target_user_id
                 )
-                await self.__save_message_to_db(message)
+                # await self.__save_message_to_db(message)
                 self.__send_message_queue.put_nowait(message)
 
     def send_message(self, message: str):
