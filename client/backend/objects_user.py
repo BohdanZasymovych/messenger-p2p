@@ -115,6 +115,9 @@ class Connection:
     def websocket(self, websocket: WebSocket):
         """Sets websocket object and sets is_online to True"""
         self.__websocket = websocket
+        if websocket is None:
+            return
+
         self.is_online = True
         self.__handle_server_requests_task = asyncio.create_task(self.__handle_server_requests())
         self.__receive_server_requests_task = asyncio.create_task(self.__receive_server_requests())
