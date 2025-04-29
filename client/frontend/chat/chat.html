@@ -1,4 +1,4 @@
-<!-- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -90,52 +90,6 @@
   </div>
 
   <a href="map.html" class="map-button">🌍 Open Map</a>
-  <script src="chat.js"></script>
-</body>
-</html> -->
-
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Chat UI</title>
-  <link rel="stylesheet" href="chat.css" />
-</head>
-<body>
-  <div class="sidebar">
-    <h2>Chats</h2>
-    <div class="create-chat">
-      <input type="text" id="newChatUserId" placeholder="Enter user ID..." />
-      <button onclick="createChat()">➕ Add Chat</button>
-    </div>
-    <ul class="chat-list" id="chatList"></ul>
-  </div>
-
-  <div class="chat-window" id="chatWindow">
-    <div class="chat-header">
-      <img src="photos/budanov.jpg" alt="Contact">
-      <div class="contact-info" id="chatWith">Select a chat</div>
-      <div class="buttons">
-        <button>📞</button>
-        <button onclick="window.location.href='map.html'">🌍 Map</button>
-        <button>⋮</button>
-      </div>
-    </div>
-
-    <div class="messages" id="messages"></div>
-    <div class="input-bar" id="inputBar">
-      <input type="text" id="messageInput" placeholder="Type smth..." onkeypress="handleKeyPress(event)">
-      <button onclick="sendMessage()">Send</button>
-    </div>
-  </div>
-
-  <!-- <script>
-    // Immediately redirect to mini2.html when page loads
-    window.onload = function() {
-      window.location.href = "mini2.html";
-    };
-  </script> -->
   <script src="chat.js"></script>
 </body>
 </html>
