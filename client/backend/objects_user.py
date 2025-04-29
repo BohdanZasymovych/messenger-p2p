@@ -4,6 +4,7 @@ import logging
 from datetime import datetime
 import asyncio
 import threading
+import bcrypt
 from typing import Union
 from aiortc import (RTCPeerConnection,
                     RTCSessionDescription,
@@ -792,13 +793,27 @@ class App:
             try:
                 data = await request.json()
                 user_id = data.get("user_id")
-                print(f"Login attempt with user_id: {user_id}")
+                password = data.get("password")
+
+                if not user_id or not password:
+                    raise HTTPException(status_code=400, detail="Missing user_id or password")
+
+                async with asyncpg.create_pool(self.DATABASE_URL) as pool:
+                    async with pool.acquire() as conn:
+                        row = await conn.fetchrow(
+                            "SELECT password FROM users WHERE user_id = $1", user_id
+                        )
+                        if row is None:
+                            raise HTTPException(status_code=401, detail="User not found")
+
+                        hashed = row["password"]
+                        if not bcrypt.checkpw(password.encode(), hashed.encode()):
+                            raise HTTPException(status_code=401, detail="Invalid password")
+
                 self.user_id = user_id
                 self.__user_id_set.set()
-                print("Login successful")
                 return {"status": "success", "user_id": user_id}
             except Exception as e:
-                print(f"Login error: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
 
     
