@@ -73,34 +73,18 @@
             font-size: 16px;
             cursor: pointer;
         }
-        .divider {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 20px 0;
+        .switch-auth {
+            margin-top: 15px;
+            font-size: 14px;
         }
-        .divider::before, .divider::after {
-            content: "";
-            flex: 1;
-            height: 1px;
-            background: white;
-            margin: 0 10px;
-        }
-        .social-buttons button {
-            display: block;
-            width: 100%;
-            padding: 10px;
-            margin: 10px 0;
+        .switch-auth button {
+            background: none;
             border: none;
-            border-radius: 5px;
-            background: rgba(255, 255, 255, 0.2);
-            color: white;
-            font-size: 16px;
+            color: #1E90FF;
             cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
+            font-size: 14px;
+            text-decoration: underline;
+            margin-left: 5px;
         }
     </style>
 </head>
@@ -118,22 +102,16 @@
             <input type="password" name="password" placeholder="Enter password">
             <button class="continue-button" type="submit">Continue</button>
         </form>
-
-        <div class="divider">OR</div>
-        <div class="social-buttons">
-            <button>
-                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/768px-Google_%22G%22_logo.svg.png" width="20">
-                Enter with Google
-            </button>
-            <button>
-                <img src="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" width="20">
-                Enter with GitHub
-            </button>
-            <button>📞 Enter with number</button>
+        <div class="switch-auth">
+            Already registered?
+            <button onclick="window.location.href='login.html'">Log In</button>
         </div>
     </div>
 
-    <!-- ПІДКЛЮЧЕННЯ register.js -->
+    
     <script src="register.js"></script>
 </body>
 </html>
+<!--
+
+-->
