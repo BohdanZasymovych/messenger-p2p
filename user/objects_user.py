@@ -738,6 +738,38 @@ class Chat:
             print(f"Error in send_message: {str(e)}")
             raise
 
+    async def get_new_messages_after(self, timestamp):
+        """Get messages between users that are newer than specified timestamp"""
+        try:
+            conn = await self.get_db_connection()
+            cursor = await conn.cursor()
+            
+            await cursor.execute("""
+                SELECT * FROM messages
+                WHERE ((user_id = %s AND target_user_id = %s)
+                OR (user_id = %s AND target_user_id = %s))
+                AND timestamp > %s
+                ORDER BY timestamp ASC;
+            """, (self.user_id, self.target_user_id, self.target_user_id, self.user_id, timestamp))
+            
+            rows = await cursor.fetchall()
+            await cursor.close()
+            await conn.close()
+            
+            messages = []
+            for row in rows:
+                is_from_me = row[1] == self.user_id  # user_id колонка
+                messages.append({
+                    "sender": "me" if is_from_me else "you",
+                    "text": row[3],  # message колонка
+                    "timestamp": row[5].isoformat()  # timestamp колонка
+                })
+                
+            return messages
+        except Exception as e:
+            print(f"Error getting new messages after timestamp: {str(e)}")
+            return []
+
 
 class LoginRequest(BaseModel):
     user_id: str
@@ -851,6 +883,41 @@ class App:
                 return messages
             print(f"No messages found for chat with {target_user_id}")
             return []
+        
+        @self.api_router.get("/get_new_messages/{user_id}/{target_user_id}/{last_timestamp}")
+        async def get_new_messages(user_id: str, target_user_id: str, last_timestamp: str):
+            """Get only new messages that came after the last_timestamp"""
+            if user_id != self.user_id:
+                raise HTTPException(status_code=403, detail="Unauthorized access")
+
+            try:
+                from datetime import datetime
+                timestamp_obj = datetime.fromisoformat(last_timestamp.replace('Z', '+00:00'))
+
+                if target_user_id in self.__chats:
+                    chat = self.__chats[target_user_id]
+                    messages = await chat.get_new_messages_after(timestamp_obj)
+                    return messages
+
+                temp_chat = Chat(
+                    user_id=self.user_id,
+                    target_user_id=target_user_id,
+                    long_term_private_key=self.__private_key,
+                    long_term_public_key=self.__public_key,
+                    on_message_callback=self.on_message_received
+                )
+
+                messages = await temp_chat.get_new_messages_after(timestamp_obj)
+
+                if messages and len(messages) > 0:
+                    if target_user_id not in self.__chats:
+                        await self.add_chat(target_user_id)
+                    return messages
+
+                return []
+            except Exception as e:
+                print(f"Error getting new messages: {str(e)}")
+                raise HTTPException(status_code=500, detail=str(e))
 
         @self.api_router.post("/send_message")
         async def send_message(msg: MessageRequest):
