@@ -724,31 +724,26 @@ class Server:
             print(f"❌ Failed to connect to DB: {conn_err}")
             return False
         
-    async def __get_user_info_from_db(self, username: str, email: str, password: str) -> dict | None:
-        """
-        Gets user info from the 'users' table.
-        Verifies if username and email match and if password is correct.
-        Returns a dictionary with user data if valid, otherwise None.
-        """
+    async def __get_user_info_from_db(self, email: str, password: str) -> dict | None:
         conn = await asyncpg.connect(self.SERVER_DATABASE_URL)
         try:
             row = await conn.fetchrow("""
                 SELECT user_id, email, password
                 FROM users
-                WHERE user_id = $1 AND email = $2;
-            """, username, email)
+                WHERE email = $1;
+            """, email)
 
             if row is None:
                 return None
 
-            # Перевірка пароля
             stored_password = row["password"]
             if bcrypt.checkpw(password.encode('utf-8'), stored_password.encode('utf-8')):
-                return {"user_id": row["user_id"], "email": row["email"], "password": stored_password}
+                return {"user_id": row["user_id"], "email": row["email"]}
             else:
                 return None
         finally:
             await conn.close()
+
 
 
     def __disconnect_user(self, user_id: str):
@@ -1009,29 +1004,33 @@ class Server:
 
     async def __handle_check_user_exists_request(self, websocket, data: dict):
         """
-        Handles request to check if user exists in the database by username, email and password.
-        Sends back a response with user_exists: True or False.
+        Handles login request using email and password.
+        Verifies user credentials and sends back user_id if login is successful.
         """
-        user_id = data.get("user_id")
         email = data.get("email")
         password = data.get("password")
 
-        if not user_id or not email or not password:
+        if not email or not password:
             error_response = Request(
                 request_type="get_user_info_from_data_base_response",
-                content={"status": "error", "message": "Missing username, email or password."}
+                content={"status": "error", "message": "Missing email or password."}
             )
             await websocket.send(error_response.json_string)
             return
 
-        user_info = await self.__get_user_info_from_db(user_id, email, password)
+        user_info = await self.__get_user_info_from_db(email, password)
         user_exists = bool(user_info)
 
         response = Request(
             request_type="get_user_info_from_data_base_response",
-            content={"status": "success", "user_exists": user_exists}
+            content={
+                "status": "success",
+                "user_exists": user_exists,
+                "user_id": user_info["user_id"] if user_exists else None
+            }
         )
         await websocket.send(response.json_string)
+
 
     async def __receive_requests(self, websocket: WebSocket, requests_queue: asyncio.Queue):
         """Function which receives requests from user and adds them to the requests queue"""

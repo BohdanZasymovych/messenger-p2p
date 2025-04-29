@@ -903,7 +903,7 @@ class App:
                 async with asyncpg.create_pool(self.DATABASE_URL) as pool:
                     async with pool.acquire() as conn:
                         row = await conn.fetchrow(
-                            "SELECT password FROM users WHERE username = $1", user_id
+                            "SELECT password FROM users WHERE user_id = $1", user_id
                         )
                         if row is None:
                             raise HTTPException(status_code=401, detail="User not found")
