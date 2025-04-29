@@ -562,81 +562,6 @@ class Chat:
         self.is_opened = asyncio.Event()
         self.is_closed = asyncio.Event()
 
-    async def __save_message_to_db(self, message: Message, is_outgoing: bool = True) -> None:
-        """Saves message to the database"""
-        try:
-            user_id = message.user_id
-            target_user_id = message.target_user_id
-            message_content = message.content
-
-            print(f"Saving message to database: {user_id} -> {target_user_id}: '{message_content[:20]}...'")
-
-            conn = await asyncpg.connect(self.DATABASE_URL)
-            try:
-                await conn.execute("""--sql
-                    CREATE TABLE IF NOT EXISTS messages (
-                        id SERIAL PRIMARY KEY,
-                        user_id TEXT NOT NULL,
-                        target_user_id TEXT NOT NULL,
-                        message TEXT NOT NULL,
-                        is_outgoing BOOLEAN DEFAULT TRUE,
-                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    );
-                """)
-
-                await conn.execute("""--sql
-                    INSERT INTO messages (user_id, target_user_id, message, is_outgoing)
-                    VALUES ($1, $2, $3, $4);
-                """, user_id, target_user_id, message_content, is_outgoing)
-
-                print(f"Message from {user_id} to {target_user_id} saved to database")
-            finally:
-                await conn.close()
-        except Exception as e:
-            print(f"Error saving message to database: {str(e)}")
-
-    async def __get_messages_from_db(self, limit=100) -> list:
-        """Gets messages between current user and target user from the database"""
-        try:
-            conn = await asyncpg.connect(self.DATABASE_URL)
-            try:
-                await conn.execute("""--sql
-                    CREATE TABLE IF NOT EXISTS messages (
-                        id SERIAL PRIMARY KEY,
-                        user_id TEXT NOT NULL,
-                        target_user_id TEXT NOT NULL,
-                        message TEXT NOT NULL,
-                        is_outgoing BOOLEAN DEFAULT TRUE,
-                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    );
-                """)
-
-                rows = await conn.fetch("""--sql
-                    SELECT * FROM messages
-                    WHERE (user_id = $1 AND target_user_id = $2)
-                    OR (user_id = $2 AND target_user_id = $1)
-                    ORDER BY timestamp ASC
-                    LIMIT $3;
-                """, self.user_id, self.target_user_id, limit)
-
-                print(f"Retrieved {len(rows)} messages from database for chat between {self.user_id} and {self.target_user_id}")
-
-                messages = []
-                for row in rows:
-                    is_from_me = row["user_id"] == self.user_id
-
-                    messages.append({
-                        "sender": "me" if is_from_me else "you",
-                        "text": row["message"],
-                        "timestamp": row["timestamp"].isoformat() if hasattr(row["timestamp"], "isoformat") else str(row["timestamp"])
-                    })
-
-                return messages
-            finally:
-                await conn.close()
-        except Exception as e:
-            print(f"Error retrieving messages from database: {str(e)}")
-            return []
 
     async def get_message_history(self):
         """Public method to get message history from database"""
@@ -778,7 +703,9 @@ class Chat:
                 content=message
             )
 
-            asyncio.create_task(self.__save_message_to_db(message_obj, is_outgoing=True))
+            # asyncio.create_task(self.__save_message_to_db(message_obj, is_outgoing=True))
+            if hasattr(self, '__on_message_save_callback') and callable(self.__on_message_save_callback):
+                asyncio.create_task(self.__on_message_save_callback(message_obj, is_outgoing=True))
 
             self.__send_message_queue.put_nowait(message_obj)
 
@@ -787,38 +714,6 @@ class Chat:
             print(f"Error in send_message: {str(e)}")
             raise
 
-    async def get_new_messages_after(self, timestamp):
-        """Get messages between users that are newer than specified timestamp"""
-        try:
-            if hasattr(timestamp, 'isoformat'):
-                timestamp = timestamp.isoformat()
-            conn = await asyncpg.connect(self.DATABASE_URL)
-            
-            try:
-                rows = await conn.fetch("""--sql
-                    SELECT * FROM messages
-                    WHERE ((user_id = $1 AND target_user_id = $2)
-                    OR (user_id = $2 AND target_user_id = $1))
-                    AND timestamp > $3::text::timestamp
-                    ORDER BY timestamp ASC;
-                """, self.user_id, self.target_user_id, timestamp)
-                
-                messages = []
-                for row in rows:
-                    is_from_me = row['user_id'] == self.user_id
-                    messages.append({
-                        "sender": "me" if is_from_me else "you",
-                        "text": row['message'],
-                        "timestamp": row['timestamp'].isoformat(),
-                        "id": str(row['id'])
-                    })
-                    
-                return messages
-            finally:
-                await conn.close()
-        except Exception as e:
-            print(f"Error getting new messages after timestamp: {str(e)}")
-            return []
 
 class LoginRequest(BaseModel):
     """Class representing login request"""
@@ -906,35 +801,15 @@ class App:
                 print(f"Login error: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
 
+    
         @self.__api_router.get("/get_messages/{user_id}/{target_user_id}")
         async def get_messages(user_id: str, target_user_id: str):
             """Get messages between user_id and target_user_id"""
             if user_id != self.user_id:
                 print(f"User mismatch: {user_id} vs {self.user_id}")
                 raise HTTPException(status_code=403, detail="Unauthorized access")
-
-            if target_user_id in self.__chats:
-                chat = self.__chats[target_user_id]
-                return await chat.get_message_history()
-
-            print(f"Chat with {target_user_id} not found in memory, checking database")
-
-            temp_chat = Chat(
-                user_id=self.user_id,
-                target_user_id=target_user_id,
-                long_term_private_key=self.__private_key,
-                long_term_public_key=self.__public_key,
-                on_message_callback=self.on_message_received
-            )
-
-            messages = await temp_chat.get_message_history()
-
-            if messages and len(messages) > 0:
-                print(f"Found {len(messages)} messages in database, creating chat")
-                await self.add_chat(target_user_id)
-                return messages
-            print(f"No messages found for chat with {target_user_id}")
-            return []
+    
+            return await self.get_message_history(user_id, target_user_id)
 
         @self.__api_router.get("/get_new_messages/{user_id}/{target_user_id}/{last_timestamp}")
         async def get_new_messages(user_id: str, target_user_id: str, last_timestamp: str):
@@ -943,32 +818,12 @@ class App:
                 raise HTTPException(status_code=403, detail="Unauthorized access")
 
             try:
-                timestamp_obj = datetime.fromisoformat(last_timestamp.replace('Z', '+00:00'))
-
-                if target_user_id in self.__chats:
-                    chat = self.__chats[target_user_id]
-                    messages = await chat.get_new_messages_after(timestamp_obj)
-                    return messages
-
-                temp_chat = Chat(
-                    user_id=self.user_id,
-                    target_user_id=target_user_id,
-                    long_term_private_key=self.__private_key,
-                    long_term_public_key=self.__public_key,
-                    on_message_callback=self.on_message_received
-                )
-
-                messages = await temp_chat.get_new_messages_after(timestamp_obj)
-
-                if messages and len(messages) > 0:
-                    if target_user_id not in self.__chats:
-                        await self.add_chat(target_user_id)
-                    return messages
-
-                return []
+                # Змінюємо на використання методу з App
+                return await self.get_new_messages_after(user_id, target_user_id, last_timestamp)
             except Exception as e:
                 print(f"Error getting new messages: {str(e)}")
-                raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=500, detail=str(e))
+
 
         @self.__api_router.post("/send_message")
         async def send_message(msg: MessageRequest):
@@ -1054,6 +909,120 @@ class App:
                     """, user_id)
         finally:
             await conn.close()
+    
+    async def save_message_to_db(self, message: Message, is_outgoing: bool = True) -> None:
+        """Saves message to the database"""
+        try:
+            user_id = message.user_id
+            target_user_id = message.target_user_id
+            message_content = message.content
+
+            print(f"Saving message to database: {user_id} -> {target_user_id}: '{message_content[:20]}...'")
+
+            conn = await asyncpg.connect(self.DATABASE_URL)
+            try:
+                await conn.execute("""--sql
+                    CREATE TABLE IF NOT EXISTS messages (
+                        id SERIAL PRIMARY KEY,
+                        user_id TEXT NOT NULL,
+                        target_user_id TEXT NOT NULL,
+                        message TEXT NOT NULL,
+                        is_outgoing BOOLEAN DEFAULT TRUE,
+                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    );
+                """)
+
+                await conn.execute("""--sql
+                    INSERT INTO messages (user_id, target_user_id, message, is_outgoing)
+                    VALUES ($1, $2, $3, $4);
+                """, user_id, target_user_id, message_content, is_outgoing)
+
+                print(f"Message from {user_id} to {target_user_id} saved to database")
+            finally:
+                await conn.close()
+        except Exception as e:
+            print(f"Error saving message to database: {str(e)}")
+    
+    async def get_messages_from_db(self, user_id: str, target_user_id: str, limit=100) -> list:
+        """Gets messages between users from the database"""
+        try:
+            conn = await asyncpg.connect(self.DATABASE_URL)
+            try:
+                await conn.execute("""--sql
+                    CREATE TABLE IF NOT EXISTS messages (
+                        id SERIAL PRIMARY KEY,
+                        user_id TEXT NOT NULL,
+                        target_user_id TEXT NOT NULL,
+                        message TEXT NOT NULL,
+                        is_outgoing BOOLEAN DEFAULT TRUE,
+                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    );
+                """)
+
+                rows = await conn.fetch("""--sql
+                    SELECT * FROM messages
+                    WHERE (user_id = $1 AND target_user_id = $2)
+                    OR (user_id = $2 AND target_user_id = $1)
+                    ORDER BY timestamp ASC
+                    LIMIT $3;
+                """, user_id, target_user_id, limit)
+
+                print(f"Retrieved {len(rows)} messages from database for chat between {user_id} and {target_user_id}")
+
+                messages = []
+                for row in rows:
+                    is_from_me = row["user_id"] == user_id
+
+                    messages.append({
+                        "sender": "me" if is_from_me else "you",
+                        "text": row["message"],
+                        "timestamp": row["timestamp"].isoformat() if hasattr(row["timestamp"], "isoformat") else str(row["timestamp"]),
+                        "id": str(row["id"])
+                    })
+
+                return messages
+            finally:
+                await conn.close()
+        except Exception as e:
+            print(f"Error retrieving messages from database: {str(e)}")
+            return []
+    
+    async def get_message_history(self, user_id: str, target_user_id: str):
+        """Public method to get message history from database"""
+        return await self.get_messages_from_db(user_id, target_user_id)
+    
+    async def get_new_messages_after(self, user_id: str, target_user_id: str, timestamp):
+        """Get messages between users that are newer than specified timestamp"""
+        try:
+            if hasattr(timestamp, 'isoformat'):
+                timestamp = timestamp.isoformat()
+            conn = await asyncpg.connect(self.DATABASE_URL)
+            
+            try:
+                rows = await conn.fetch("""--sql
+                    SELECT * FROM messages
+                    WHERE ((user_id = $1 AND target_user_id = $2)
+                    OR (user_id = $2 AND target_user_id = $1))
+                    AND timestamp > $3::text::timestamp
+                    ORDER BY timestamp ASC;
+                """, user_id, target_user_id, timestamp)
+                
+                messages = []
+                for row in rows:
+                    is_from_me = row['user_id'] == user_id
+                    messages.append({
+                        "sender": "me" if is_from_me else "you",
+                        "text": row['message'],
+                        "timestamp": row['timestamp'].isoformat(),
+                        "id": str(row['id'])
+                    })
+                    
+                return messages
+            finally:
+                await conn.close()
+        except Exception as e:
+            print(f"Error getting new messages after timestamp: {str(e)}")
+            return []
 
     async def add_chat(self, target_user_id: str):
         """Adds chat with the target user to application"""
@@ -1065,6 +1034,9 @@ class App:
             long_term_public_key=self.__public_key,
             on_message_callback=self.on_message_received
         )
+        
+        chat._Chat__on_message_save_callback = self.save_message_to_db
+        
         self.__chats[target_user_id] = chat
 
         await self.save_chat_to_db(target_user_id)
