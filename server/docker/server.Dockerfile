@@ -15,8 +15,8 @@ WORKDIR /app
 # Copy installed dependencies from builder stage
 COPY --from=builder /root/.local /root/.local
 
-# Add application files
-COPY . .
+# Copy application code
+COPY backend/ /app/
 
 # Ensure the installed packages are accessible
 ENV PATH="/root/.local/bin:$PATH"

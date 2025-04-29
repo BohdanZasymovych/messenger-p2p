@@ -11,17 +11,15 @@ services:
       - "5434:5432"
     volumes:
       - postgres_data_user:/var/lib/postgresql/data
-      - ./db_init_user.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./docker/db_init_user.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
       - messenger_network
 
   messenger:
     build:
       context: .
-      dockerfile: messenger.Dockerfile
+      dockerfile: docker/messenger.Dockerfile
     container_name: messenger_app
-    # stdin_open: true
-    # tty: true
     environment:
       DATABASE_URL_CLIENT: "${DATABASE_URL_CLIENT}"
     sysctls:
@@ -34,11 +32,11 @@ services:
     depends_on:
       - user_database
     volumes:
-      - .:/app
+      - ./backend:/app/backend
       - encryption_keys:/app/keys
       - message_data:/app/data 
     working_dir: /app
-    command: sh -c "chmod +x start.sh && ./start.sh" #python generate_keys.py && 
+    # command: sh -c "chmod +x start.sh && ./start.sh"
     networks:
       - messenger_network
 

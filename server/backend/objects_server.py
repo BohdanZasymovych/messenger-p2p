@@ -88,7 +88,6 @@ class Server:
             """, user_id, target_user_id, message)
         finally:
             await conn.close()
-        print(f"Message from {user_id} to {target_user_id} saved to database.")
 
     async def __get_messages_from_db(self, user_id: str, target_user_id: str) -> list:
         """Gets messages to specified user from the database"""

@@ -10,7 +10,7 @@ services:
       - "5433:5432"
     volumes:
       - postgres_data_server:/var/lib/postgresql/data
-      - ./db_init_server.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./docker/db_init_server.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
       - messenger_network
 
@@ -18,7 +18,7 @@ services:
   server:
     build:
       context: .
-      dockerfile: server.Dockerfile
+      dockerfile: docker/server.Dockerfile
     container_name: messenger_server
     environment:
       DATABASE_URL_SERVER: "${DATABASE_URL_SERVER}"
@@ -27,7 +27,7 @@ services:
     ports:
       - "9000:9000"
     volumes:
-      - .:/app
+      - ./backend:/app
     networks:
       - messenger_network
 

@@ -2,7 +2,6 @@
 import asyncio
 from objects_server import Server
 
-
 SERVER_IP = "0.0.0.0"
 SERVER_PORT = 9000
 

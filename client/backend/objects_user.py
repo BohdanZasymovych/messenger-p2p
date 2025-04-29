@@ -104,7 +104,7 @@ class Connection:
 
         # Adds disconnect handler task to the event loop
         # __on_disconnect function will be ran each time data_channel_closing_event is being set
-        asyncio.create_task(self.__on_disconnect())
+        asyncio.create_task(self.__on_p2p_disconnect())
 
     @property
     def websocket(self) -> WebSocket:
@@ -139,18 +139,7 @@ class Connection:
         self.is_p2p_connection_failed = False
         self.role = None
 
-    async def server_disconect(self):
-        """Disconnects user from the server"""
-        if self.websocket:
-            await self.__cancel_server_listener_task()
-            await self.websocket.close()
-
-        self.is_connected_websocket = False
-        self.websocket = None
-
-        await self.p2p_disconnect()
-
-    async def __on_disconnect(self) -> None:
+    async def __on_p2p_disconnect(self) -> None:
         """
         Waits untill data channel was closed, clears user
         and, if disconnect was initialized by another peer,
@@ -166,6 +155,40 @@ class Connection:
 
             self.local_disconnect_initialized = False
             self.is_target_user_online = None
+
+    async def disconnect(self):
+        """Disconnects user from the server and cleans up all resources"""
+        print("Performing full disconnect")
+
+        # Cancel all pending futures
+        for _, future in list(self.futures.items()):
+            if not future.done():
+                future.cancel()
+        self.futures.clear()
+
+        # Clear message queues
+        while not self.received_messages_queue.empty():
+            try:
+                self.received_messages_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+
+        while not self.requests_queue.empty():
+            try:
+                self.requests_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+
+        # Close websocket connection and cancel tasks
+        if self.websocket:
+            await self.__cancel_server_listener_task()
+            await self.websocket.close()
+
+        self.local_disconnect_initialized = True
+        await self.p2p_disconnect()
+
+        self.is_connected_websocket = False
+        self.websocket = None
 
     def __receive_message(self, message: str, encryption: str, public_key=None) -> None:
         """Adds message received as json string to the queue"""
@@ -339,7 +362,7 @@ class Connection:
                 self.requests_queue.put_nowait(request)
         except websockets.exceptions.ConnectionClosed:
             print("Websocket was closed")
-            await self.server_disconect()
+            await self.disconnect()
             return
         except asyncio.CancelledError:
             print("Handler task was cancelled")
@@ -530,7 +553,11 @@ class Chat:
         self.__long_term_encryptinon.set_keys(long_term_private_key, long_term_public_key)
         print(f"Long term public key: {self.__long_term_encryptinon.public_key}")
 
+        self.__send_message_task: asyncio.Task = None
+        self.__receive_message_task: asyncio.Task = None
+
         self.is_opened = asyncio.Event()
+        self.is_closed = asyncio.Event()
 
     async def __save_message_to_db(self, message: Message, is_outgoing: bool = True) -> None:
         """Saves message to the database"""
@@ -685,11 +712,8 @@ class Chat:
             message = await self.__send_message_queue.get()
             await self.__send_message_to_peer(message)
 
-    async def close(self):
-        """Closes chat and disconnects user"""
-        self.__connection.local_disconnect_initialized = True
-        await self.__connection.server_disconect()
-        asyncio.create_task(self.__connection.p2p_disconnect())
+
+        print(f"Chat with {self.target_user_id} closed")
 
     async def open(self):
         """Opens and runs chat"""
@@ -710,14 +734,36 @@ class Chat:
         self.__connection.websocket = websocket
 
         try:
-            send_message_task = asyncio.create_task(self.__send_message_loop())
-            receive_message_task = asyncio.create_task(self.__on_message_received())
+            self.__send_message_task = asyncio.create_task(self.__send_message_loop())
+            self.__receive_message_task = asyncio.create_task(self.__on_message_received())
             connect_to_server_task = asyncio.create_task(self.__connection.connect_to_server(self.__encryption.public_key))
             self.is_opened.set()
 
-            await asyncio.gather(connect_to_server_task, receive_message_task, send_message_task)
+            await asyncio.gather(connect_to_server_task, self.__receive_message_task, self.__send_message_task)
         finally:
             await self.close()
+
+    async def close(self):
+        """Closes chat and disconnects user"""
+        print(f"Closing chat with {self.target_user_id}")
+
+        self.__connection.local_disconnect_initialized = True
+
+        if self.__send_message_task is not None:
+            self.__send_message_task.cancel()
+
+        if self.__receive_message_task is not None:
+            self.__receive_message_task.cancel()
+
+        while not self.__send_message_queue.empty():
+            try:
+                self.__send_message_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+
+        await self.__connection.disconnect()
+
+        self.is_closed.set()
 
     def send_message(self, message: str):
         """Sends message to the target user"""
@@ -772,13 +818,16 @@ class Chat:
 
 
 class LoginRequest(BaseModel):
+    """Class representing login request"""
     user_id: str
 
 class ChatRequest(BaseModel):
+    """Class representing chat request"""
     user_id: str
     target_user_id: str
 
 class MessageRequest(BaseModel):
+    """Class representing message request"""
     user_id: str
     target_user_id: str
     text: str
@@ -803,7 +852,7 @@ class App:
 
         self.__requests_queue = asyncio.Queue()
         # Create a separate router for API endpoints FIRST
-        self.api_router = APIRouter(prefix="/api")
+        self.__api_router = APIRouter(prefix="/api")
 
         self.__chats = {}  # user_id: Chat
         self.__new_chats = []
@@ -816,7 +865,7 @@ class App:
         self.__setup_api_routes()
 
         # Include the API router in the app
-        self.api.include_router(self.api_router)
+        self.api.include_router(self.__api_router)
 
         # Add CORS middleware
         self.api.add_middleware(
@@ -830,7 +879,7 @@ class App:
         # Add root redirect
         @self.api.get("/")
         def redirect_to_chat():
-            return RedirectResponse(url="/chat.html")
+            return RedirectResponse(url="/chat/chat.html")
 
         # Mount static files LAST - this ensures API routes take priority
         frontend_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend")
@@ -840,7 +889,7 @@ class App:
     def __setup_api_routes(self):
         """Setup API routes for the FastAPI application"""
 
-        @self.api_router.post("/login")
+        @self.__api_router.post("/login")
         async def login(request: FastAPIRequest):
             try:
                 data = await request.json()
@@ -854,7 +903,7 @@ class App:
                 print(f"Login error: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
 
-        @self.api_router.get("/get_messages/{user_id}/{target_user_id}")
+        @self.__api_router.get("/get_messages/{user_id}/{target_user_id}")
         async def get_messages(user_id: str, target_user_id: str):
             """Get messages between user_id and target_user_id"""
             if user_id != self.user_id:
@@ -883,15 +932,14 @@ class App:
                 return messages
             print(f"No messages found for chat with {target_user_id}")
             return []
-        
-        @self.api_router.get("/get_new_messages/{user_id}/{target_user_id}/{last_timestamp}")
+
+        @self.__api_router.get("/get_new_messages/{user_id}/{target_user_id}/{last_timestamp}")
         async def get_new_messages(user_id: str, target_user_id: str, last_timestamp: str):
             """Get only new messages that came after the last_timestamp"""
             if user_id != self.user_id:
                 raise HTTPException(status_code=403, detail="Unauthorized access")
 
             try:
-                from datetime import datetime
                 timestamp_obj = datetime.fromisoformat(last_timestamp.replace('Z', '+00:00'))
 
                 if target_user_id in self.__chats:
@@ -919,7 +967,7 @@ class App:
                 print(f"Error getting new messages: {str(e)}")
                 raise HTTPException(status_code=500, detail=str(e))
 
-        @self.api_router.post("/send_message")
+        @self.__api_router.post("/send_message")
         async def send_message(msg: MessageRequest):
             try:
                 # Validate the user
@@ -949,16 +997,16 @@ class App:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
 
-        @self.api_router.get("/users")
+        @self.__api_router.get("/users")
         async def get_users():
             # Return list of all users with whom the current user has chats
             return list(self.__chats.keys())
 
-        @self.api_router.get("/chats_loaded")
+        @self.__api_router.get("/chats_loaded")
         async def chats_loaded():
             return {"loaded": self.__chats_loaded}
 
-        @self.api_router.get("/get_chats/{user_id}")
+        @self.__api_router.get("/get_chats/{user_id}")
         async def get_chats(user_id: str):
             # Validate if the requested user_id matches the app's user_id
             if user_id != self.user_id:
@@ -968,7 +1016,7 @@ class App:
             # chats = [id for id, chat in self.__chats.items() if chat.user_id != user_id]
             return list(self.__chats.keys())
 
-        @self.api_router.post("/add_chat")
+        @self.__api_router.post("/add_chat")
         async def add_chat(data: ChatRequest):
             try:
                 # Validate the user
@@ -981,7 +1029,7 @@ class App:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
 
-        @self.api_router.get("/new_chats")
+        @self.__api_router.get("/new_chats")
         async def get_new_chats():
             """Return new chats that were created by other users and clear the list"""
             new_chats = self.__new_chats.copy()
@@ -1190,3 +1238,15 @@ class App:
 
         while True:
             await asyncio.sleep(1)
+
+    async def close(self):
+        """Function closing application"""
+        print("Closing application")
+        await self.websocket.close()
+
+        for chat in self.__chats.values():
+            asyncio.create_task(chat.close())
+
+        if self.__chats:
+            await asyncio.gather(*[chat.is_closed.wait() for chat in self.__chats.values()])
+        print("Application closed")
