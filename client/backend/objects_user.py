@@ -3269,7 +3269,7 @@ class App:
         # Add root redirect
         @self.api.get("/")
         def redirect_to_registration():
-            return RedirectResponse(url="/registration.html")
+            return RedirectResponse(url="auth/registration.html")
 
         # Mount static files LAST - this ensures API routes take priority
         frontend_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend")
