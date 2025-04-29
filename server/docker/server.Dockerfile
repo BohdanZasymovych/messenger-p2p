@@ -1,25 +1,26 @@
 FROM python:3.11-slim AS builder
-
 WORKDIR /app
 
-# Install dependencies
+# install build tools for bcrypt/cryptography, etc.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      build-essential \
+      libffi-dev \
+      libssl-dev \
+ && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir --user -r requirements.txt
+ && pip install --no-cache-dir -r requirements.txt
 
-# Final stage
 FROM python:3.11-slim
-
 WORKDIR /app
 
-# Copy installed dependencies from builder stage
-COPY --from=builder /root/.local /root/.local
+# copy just the global site‑packages from builder
+COPY --from=builder /usr/local /usr/local
 
-# Copy application code
+# copy your app
 COPY backend/ /app/
 
-# Ensure the installed packages are accessible
 ENV PATH="/root/.local/bin:$PATH"
-
-# Run the application
 CMD ["python", "-u", "server.py"]

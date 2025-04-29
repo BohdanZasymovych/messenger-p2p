@@ -590,7 +590,7 @@ import asyncio
 from typing import Union
 import websockets
 import asyncpg
-import bcsrypt
+import bcrypt
 from websockets.legacy.client import WebSocketClientProtocol
 from websockets.legacy.server import WebSocketServerProtocol
 
@@ -777,7 +777,7 @@ class Server:
         except Exception as conn_err:
             print(f"❌ Failed to connect to DB: {conn_err}")
             return False
-        
+
     async def __get_user_info_from_db(self, email: str, password: str) -> dict | None:
         conn = await asyncpg.connect(self.SERVER_DATABASE_URL)
         try:
