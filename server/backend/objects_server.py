@@ -270,8 +270,8 @@ class Server:
         elif target_client.is_online:
             register_response = Request(
                 request_type="register_response",
-                content = {"register_response_type": "target_user_online",
-                        "public_key": self.__clients[target_user_id].public_keys[user_id]}
+                content = {"register_response_type": "target_user_online"}
+                        # "public_key": self.__clients[target_user_id].public_keys[user_id]}
             )
             await websocket.send(register_response.json_string)
 

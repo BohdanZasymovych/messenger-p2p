@@ -460,7 +460,7 @@ class Connection:
         match register_response.content["register_response_type"]:
             case "connection_establishment_request":
                 self.role = register_response.content["role"]
-                peer_public_key = register_response.content["public_key"]
+                # peer_public_key = register_response.content["public_key"]
                 await self.__establish_p2p_connection()
             case "target_user_offline":
                 self.is_target_user_online = False
@@ -470,7 +470,7 @@ class Connection:
                 return
             case _:
                 raise IncorrectRequestTypeError("Incorrect response to register request.")
-        return peer_public_key
+        # return peer_public_key
 
     async def connect_to_peer(self) -> bool:
         """Tries to connect user to other peer"""
