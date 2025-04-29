@@ -1,11 +1,7 @@
-# version: '3.8'
-
 services:
   server_database:
     image: postgres:14
     container_name: messenger_server_db
-    env_file:
-      - .env_server
     environment:
       POSTGRES_USER: "${POSTGRES_USER_SERVER}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD_SERVER}"
@@ -14,7 +10,7 @@ services:
       - "5433:5432"
     volumes:
       - postgres_data_server:/var/lib/postgresql/data
-      - ./db_init_server.sql:/docker-entrypoint-initdb.d/init.sql:ro  # Databese init script, creates messages table
+      - ./db_init_server.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
       - messenger_network
 
@@ -24,10 +20,8 @@ services:
       context: .
       dockerfile: server.Dockerfile
     container_name: messenger_server
-    env_file:
-      - .env
     environment:
-      DATABASE_URL: "${DATABASE_URL_SERVER}"
+      DATABASE_URL_SERVER: "${DATABASE_URL_SERVER}"
     depends_on:
       - server_database
     ports:

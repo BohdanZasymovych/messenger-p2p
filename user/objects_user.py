@@ -5,7 +5,6 @@ from datetime import datetime
 import asyncio
 import threading
 from typing import Union
-# from aioconsole import ainput
 from aiortc import (RTCPeerConnection,
                     RTCSessionDescription,
                     RTCDataChannel,
@@ -24,7 +23,7 @@ import uvicorn
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 
-from messages_requests import Request, Message, Encryption
+from messages_requests import Request, Message, Encryption, SymetricEncryption
 
 WebSocket = Union[WebSocketClientProtocol, WebSocketServerProtocol]
 
@@ -74,8 +73,6 @@ class UserNotRegisteredError(Exception):
 
 class Connection:
     """Class to represent connection between to users"""
-    SERVER_URL = "ws://messenger_server:9000"
-
     def __init__(self, user_id: str, target_user_id: str):
         self.user_id: str = user_id
         self.target_user_id: str = target_user_id
@@ -99,7 +96,6 @@ class Connection:
 
         self.__receive_server_requests_task: asyncio.Task | None = None
         self.__handle_server_requests_task: asyncio.Task | None = None
-        # self.__ping_request_task: asyncio.Task | None = None
 
         self.received_messages_queue: asyncio.Queue = asyncio.Queue()
         self.requests_queue: asyncio.Queue = asyncio.Queue()
@@ -118,7 +114,6 @@ class Connection:
     @websocket.setter
     def websocket(self, websocket: WebSocket):
         """Sets websocket object and sets is_online to True"""
-        print("Setter triggered")
         self.__websocket = websocket
         self.is_online = True
         self.__handle_server_requests_task = asyncio.create_task(self.__handle_server_requests())
@@ -141,7 +136,6 @@ class Connection:
         self.p2p_connection_state = "disconnected"
         self.peer_connection = None
         self.data_channel = None
-        self.is_p2p_connected.clear()
         self.is_p2p_connection_failed = False
         self.role = None
 
@@ -182,30 +176,25 @@ class Connection:
         """Set events behavior for data channel"""
         @peer_connection.on("connectionstatechange")
         def on_connection_state_change():
-            # logging.info("Connection state changed: %s", peer_connection.connectionState)
-            print("Connection state changed: %s", peer_connection.connectionState)
+            print(f"Connection state changed: {peer_connection.connectionState}")
 
         @peer_connection.on("iceconnectionstatechange")
         def on_ice_state_change():
-            # logging.info("Ice connection state changed: %s", peer_connection.iceConnectionState)
-            print("Ice connection state changed: %s", peer_connection.iceConnectionState)
+            print(f"Ice connection state changed: {peer_connection.iceConnectionState}")
 
         @peer_connection.on("icegatheringstatechange")
         def on_ice_gathering_change():
-            # logging.info("Ice gathering state changed: %s", peer_connection.iceGatheringState)
-            print("Ice gathering state changed: %s", peer_connection.iceGatheringState)
+            print(f"Ice gathering state changed: {peer_connection.iceGatheringState}")
 
         @peer_connection.on("signalingstatechange")
         def on_signaling_state_change():
-            # logging.info("Signaling state changed: %s", peer_connection.signalingState)
-            print("Signaling state changed: %s", peer_connection.signalingState)
+            print(f"Signaling state changed: {peer_connection.signalingState}")
 
     def __set_data_channel_events(self, data_channel: RTCDataChannel) -> None:
         """Set events behavior for data channel"""
         @data_channel.on("error")
         def on_error(error):
-            print("Data channel error:", error)
-            # logging.error("Data channel error: %s", error)
+            print(f"Data channel error: {error}")
 
         @data_channel.on('message')
         def on_message(message):
@@ -256,7 +245,6 @@ class Connection:
         try:
             await asyncio.wait_for(self.is_p2p_connected.wait(), 10)
             self.data_channel = dc
-            # self.p2p_connection_state = "connected"
         except asyncio.TimeoutError:
             return False # Connection failed
 
@@ -313,7 +301,6 @@ class Connection:
         try:
             await asyncio.wait_for(self.is_p2p_connected.wait(), 10)
             self.data_channel = dc
-            # self.p2p_connection_state = "connected"
         except asyncio.TimeoutError:
             return False # Connection failed
 
@@ -378,9 +365,6 @@ class Connection:
                     self.role = request.content["role"]
                     self.__establish_p2p_connection_task = asyncio.create_task(self.__establish_p2p_connection())
 
-                # elif request_type == "ping_request":
-                #     print("Ping request received")
-
                 elif request_type in self.futures:
                     self.futures[request_type].set_result(request)
 
@@ -406,16 +390,6 @@ class Connection:
                 await self.__receive_server_requests_task
             except asyncio.CancelledError:
                 self.__receive_server_requests_task = None
-
-    # async def __ping_server(self):
-    #     while True:
-    #         ping_request = Request(
-    #             request_type="ping_request",
-    #             user_id=self.user_id,
-    #             content={}
-    #         )
-    #         await self.websocket.send(ping_request.json_string)
-    #         await asyncio.sleep(1)
 
     async def __update_target_user_status(self) -> str:
         """Updates target user status (online, offline) by sending get_target_user_status_request"""
@@ -482,7 +456,6 @@ class Connection:
         connection_response = asyncio.Future()
         self.futures["connection_response"] = connection_response
         await self.websocket.send(connection_request.json_string)
-        # print(f"Connection request sent: {connection_request.json_string}")
 
         connection_response = await connection_response
         del self.futures["connection_response"]
@@ -506,12 +479,10 @@ class Connection:
             self.is_p2p_connected.set()
             self.p2p_connection_state = "connected"
             self.is_p2p_connection_failed = False
-            # return True # Connected successfully
             return peer_public_key
 
         self.is_p2p_connection_failed = True
         self.p2p_connection_state = "disconnected"
-        # return False # Connection failed
         return peer_public_key
 
     async def connect(self, public_key: str) -> bool:
@@ -531,7 +502,7 @@ class Connection:
             try:
                 await asyncio.wait_for(self.is_p2p_connected.wait(), 10)
             except asyncio.TimeoutError:
-                print("Connection timeout in connection.connect().")
+                print("Connection timeout in Connection.connect().")
                 self.is_p2p_connected.clear()
                 self.p2p_connection_state = "disconnected"
                 self.is_p2p_connection_failed = True
@@ -544,8 +515,7 @@ class Chat:
     """Class to represent chat between two users"""
     DATABASE_URL = os.getenv("DATABASE_URL_CLIENT")
 
-
-    def __init__(self, user_id: str, target_user_id: str, on_message_callback: callable=None):
+    def __init__(self, user_id: str, target_user_id: str, long_term_private_key: str, long_term_public_key: str, on_message_callback: callable=None):
         self.user_id = user_id
         self.target_user_id = target_user_id
         self.__on_message_callback: callable = on_message_callback
@@ -557,7 +527,7 @@ class Chat:
         print(f"Public key: {self.__encryption.public_key}")
 
         self.__long_term_encryptinon = Encryption()
-        self.__long_term_encryptinon.load_long_term_keys()
+        self.__long_term_encryptinon.set_keys(long_term_private_key, long_term_public_key)
         print(f"Long term public key: {self.__long_term_encryptinon.public_key}")
 
         self.is_opened = asyncio.Event()
@@ -570,7 +540,7 @@ class Chat:
             message_content = message.content
 
             print(f"Saving message to database: {user_id} -> {target_user_id}: '{message_content[:20]}...'")
-            
+
             conn = await asyncpg.connect(self.DATABASE_URL)
             try:
                 await conn.execute("""--sql
@@ -583,12 +553,12 @@ class Chat:
                         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     );
                 """)
-                
+
                 await conn.execute("""--sql
                     INSERT INTO messages (user_id, target_user_id, message, is_outgoing)
                     VALUES ($1, $2, $3, $4);
                 """, user_id, target_user_id, message_content, is_outgoing)
-                
+
                 print(f"Message from {user_id} to {target_user_id} saved to database")
             finally:
                 await conn.close()
@@ -723,20 +693,7 @@ class Chat:
 
     async def open(self):
         """Opens and runs chat"""
-        websocket = await websockets.connect(self.__connection.SERVER_URL)
-
-        share_user_id_request = Request(
-            request_type="share_user_id_request",
-            user_id=self.user_id
-        )
-        await websocket.send(share_user_id_request.json_string)
-
-        send_long_term_public_key_request = Request(
-            request_type="send_long_term_public_key_request",
-            user_id=self.user_id,
-            content={"long_term_public_key": self.__long_term_encryptinon.public_key}
-        )
-        await websocket.send(send_long_term_public_key_request.json_string)
+        websocket = await websockets.connect(SERVER_URL)
 
         get_long_term_public_key_request = Request(
             request_type="get_long_term_public_key_request",
@@ -753,7 +710,6 @@ class Chat:
         self.__connection.websocket = websocket
 
         try:
-            # get_message_task = asyncio.create_task(self.__message_loop())
             send_message_task = asyncio.create_task(self.__send_message_loop())
             receive_message_task = asyncio.create_task(self.__on_message_received())
             connect_to_server_task = asyncio.create_task(self.__connection.connect_to_server(self.__encryption.public_key))
@@ -763,34 +719,14 @@ class Chat:
         finally:
             await self.close()
 
-    # async def __message_loop(self):
-    #     """Receives messages from user and adds them to the message queue"""
-    #     print()
-    #     while True:
-    #         message = await ainput('You: ')
-    #         if message:
-    #             message = Message(
-    #                 message_type="message",
-    #                 content=message,
-    #                 user_id=self.user_id,
-    #                 target_user_id=self.target_user_id
-    #             )
-    #             await self.__save_message_to_db(message)
-    #             self.__send_message_queue.put_nowait(message)
-
-    # def send_message(self, message: Message):
-    #     """Sends message to the target user"""
-    #     self.__send_message_queue.put_nowait(message)
-    #     print(message)
-
     def send_message(self, message: str):
         """Sends message to the target user"""
         try:
             message_obj = Message(
-                message_type="text",
-                content=message,
+                message_type="message",
                 user_id=self.user_id,
-                target_user_id=self.target_user_id
+                target_user_id=self.target_user_id,
+                content=message
             )
 
             asyncio.create_task(self.__save_message_to_db(message_obj, is_outgoing=True))
@@ -827,12 +763,18 @@ class App:
         self.user_id = None
         self.websocket = None
         self.__chats_loaded = False
-        self.__password = None
+        self.__password = "123456789"
+        self.__futures = {}
+        self.__public_key = None
+        self.__private_key = None
+        self.__symetric_encryption = SymetricEncryption(self.__password)
 
+        self.__requests_queue = asyncio.Queue()
         # Create a separate router for API endpoints FIRST
         self.api_router = APIRouter(prefix="/api")
 
         self.__chats = {}  # user_id: Chat
+        self.__new_chats = []
         self.__messages = {}  # Format: {target_user_id: [messages]}
 
         # User ID event to signal when user ID is set
@@ -890,17 +832,19 @@ class App:
             if target_user_id in self.__chats:
                 chat = self.__chats[target_user_id]
                 return await chat.get_message_history()
-            
+
             print(f"Chat with {target_user_id} not found in memory, checking database")
-            
+
             temp_chat = Chat(
                 user_id=self.user_id,
                 target_user_id=target_user_id,
+                long_term_private_key=self.__private_key,
+                long_term_public_key=self.__public_key,
                 on_message_callback=self.on_message_received
             )
-            
+
             messages = await temp_chat.get_message_history()
-            
+
             if messages and len(messages) > 0:
                 print(f"Found {len(messages)} messages in database, creating chat")
                 await self.add_chat(target_user_id)
@@ -914,7 +858,7 @@ class App:
                 # Validate the user
                 if msg.user_id != self.user_id:
                     raise HTTPException(status_code=403, detail="Unauthorized access")
-                
+
                 # Store outgoing message in memory
                 message_entry = {
                     "sender": "me",
@@ -963,36 +907,52 @@ class App:
                 # Validate the user
                 if data.user_id != self.user_id:
                     raise HTTPException(status_code=403, detail="Unauthorized access")
-                
-                # Add chat using the existing method
-                await self.add_chat(data.target_user_id)
+
+                await self.on_chat_creation(data.target_user_id)
+                print(f"Chat with {data.target_user_id} added")
                 return {"status": "chat added"}
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
+
+        @self.api_router.get("/new_chats")
+        async def get_new_chats():
+            """Return new chats that were created by other users and clear the list"""
+            new_chats = self.__new_chats.copy()
+            self.__new_chats = []  # Clear the list after retrieval
+            return new_chats
+
+    async def save_chat_to_db(self, target_user_id: str | list[str]):
+        """Adds chat with the target user to database"""
+        conn = await asyncpg.connect(self.DATABASE_URL)
+        if isinstance(target_user_id, str):
+            target_user_id = [target_user_id]
+        try:
+            for user_id in target_user_id:
+                user_id = self.__symetric_encryption.encrypt(user_id)
+                await conn.execute("""--sql
+                    INSERT INTO chats (target_user_id)
+                    VALUES ($1)
+                    ON CONFLICT (target_user_id) DO NOTHING;
+                    """, user_id)
+        finally:
+            await conn.close()
 
     async def add_chat(self, target_user_id: str):
         """Adds chat with the target user to application"""
         # Create chat with the callback to receive messages
         chat = Chat(
-            self.user_id, 
+            self.user_id,
             target_user_id,
+            long_term_private_key=self.__private_key,
+            long_term_public_key=self.__public_key,
             on_message_callback=self.on_message_received
         )
         self.__chats[target_user_id] = chat
 
-        # add chat to the database
-        conn = await asyncpg.connect(self.DATABASE_URL)
-        try:
-            await conn.execute("""--sql
-                INSERT INTO chats (target_user_id)
-                VALUES ($1)
-                ON CONFLICT (target_user_id) DO NOTHING;
-                """, target_user_id)
-        finally:
-            await conn.close()
+        await self.save_chat_to_db(target_user_id)
 
-        # Start chat in a background task so it doesn't block
         asyncio.create_task(chat.open())
+        await chat.is_opened.wait()  # Wait for the chat to be opened
 
     async def remove_chat(self, target_user_id: str):
         """Removes chat with the target user from application"""
@@ -1004,6 +964,7 @@ class App:
         del self.__chats[target_user_id]
 
         # remove chat from the database
+        target_user_id = self.__symetric_encryption.encrypt(target_user_id)
         conn = await asyncpg.connect(self.DATABASE_URL)
         try:
             await conn.execute("""--sql
@@ -1025,7 +986,8 @@ class App:
             await conn.close()
 
         print(f"Chats from database: {chats}")
-        return [chat["target_user_id"] for chat in chats]
+        chats = [self.__symetric_encryption.decrypt(chat["target_user_id"]) for chat in chats]
+        return chats
 
     def send_message(self, target_user_id: str, message: str):
         """Sends message to the target user"""
@@ -1054,15 +1016,52 @@ class App:
 
         print(f"Received message from {target_user_id}: {message_text}")
 
-    async def __login(self):
-        """Login do the app and set user_id and password attributes in case of success"""
-        pass
+    async def __receive_server_requests(self):
+        """Function which receives requests from server and adds them to the requests queue"""
+        try:
+            async for request in self.websocket:
+                print(f"Request received: {request}")
+                self.__requests_queue.put_nowait(request)
+        except websockets.exceptions.ConnectionClosed:
+            print("Websocket was closed")
+            return
+        except asyncio.CancelledError:
+            print("App receiver task was cancelled")
+            return
 
-    async def __session(self):
-        """Session function which is called when user is logged in"""
-        pass
+    async def __handle_server_requests(self):
+        while True:
+            request = await self.__requests_queue.get()
+            request = Request.from_string(request)
+            request_type = request.type
+            content = request.content
+
+            if request_type == "create_chat_request":
+                target_user_id = content["target_user_id"]
+                await self.add_chat(target_user_id)
+                await self.__chats[target_user_id].is_opened.wait()
+                self.__new_chats.append(target_user_id)
+
+            elif request_type in self.__futures:
+                self.__futures[request_type].set_result(request)
+
+            else:
+                raise IncorrectRequestTypeError("Incorrect request type in __handle_server_requests. (App)")
+
+    async def on_chat_creation(self, target_user_id: str):
+        """Function which is called when chat is created"""
+        await self.add_chat(target_user_id)
+
+        create_chat_request = Request(
+            request_type="create_chat_request",
+            user_id=self.user_id,
+            content={"target_user_id": target_user_id}
+        )
+        await self.websocket.send(create_chat_request.json_string)
+        print(f"Chat creation request sent: {create_chat_request.json_string}")
 
     async def open(self):
+        """Function opening application"""
         # Start the API server
         def start_server():
             uvicorn.run(self.api, host="0.0.0.0", port=8000)
@@ -1074,13 +1073,53 @@ class App:
         print("API server started on http://localhost:8000")
         print("Waiting for user login...")
 
-        self.websocket = await websockets.connect(SERVER_URL)
-
         # Wait for user ID to be set from the frontend
         self.__user_id_set.wait()
         print(f"User logged in: {self.user_id}")
 
-        await self.__session()
+        self.websocket = await websockets.connect(SERVER_URL)
+
+        asyncio.create_task(self.__receive_server_requests())
+        asyncio.create_task(self.__handle_server_requests())
+
+        self.__private_key, self.__public_key = Encryption.load_long_term_keys(self.__password)
+        login_request = Request(
+            request_type="login_request",
+            user_id=self.user_id,
+            content={"long_term_public_key": self.__public_key}
+        )
+        self.__futures["created_chats"] = asyncio.Future()
+        await self.websocket.send(login_request.json_string)
+        print(f"Login request sent: {login_request.json_string}")
+
+        created_chats = await self.__futures["created_chats"]
+        created_chats = created_chats.content["created_chats"]
+
+        await self.save_chat_to_db(created_chats)
+
+        # Getting and initializing chats
+        target_user_ids = await self.__get_chats_from_db()
+        for target_user_id in target_user_ids:
+            if target_user_id == self.user_id:
+                continue
+            chat = Chat(
+                user_id=self.user_id,
+                target_user_id=target_user_id,
+                long_term_private_key=self.__private_key,
+                long_term_public_key=self.__public_key,
+                on_message_callback=self.on_message_received)
+            self.__chats[target_user_id] = chat
+            print(f"Chat loaded: {chat.target_user_id}")
+        print(f"All chats loaded: {self.__chats}")
+
+        for chat in self.__chats.values():
+            asyncio.create_task(chat.open())
+
+        if self.__chats:
+            await asyncio.gather(*[chat.is_opened.wait() for chat in self.__chats.values()])
+        print("All chats are opened")
+
+        self.__chats_loaded = True
 
         while True:
             await asyncio.sleep(1)

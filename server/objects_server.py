@@ -45,7 +45,7 @@ class UserNotRegisteredError(Exception):
 
 class User:
     """Class that represents user on the server side"""
-    def __init__(self, websocket=None):
+    def __init__(self):
         self.is_online = False # Indicates if user is connected to the server
 
         # Websocket which is used to comunicate with the server for entire app
@@ -56,8 +56,9 @@ class User:
         self.pending_users = set() # User waiting for you
         self.pended_users = set() # User you are waiting for
 
-        self.public_key = None
+        self.long_term_public_key = None
         self.public_keys = {} # Target user id you have chat with: your public key
+        self.created_chats = [] # Chats other users created with you
 
     def disconnect(self):
         """Sets user to default disconnected state"""
@@ -192,7 +193,7 @@ class Server:
         except Exception as conn_err:
             print(f"❌ Failed to connect to DB: {conn_err}")
             return False
-        
+
     async def __get_user_info_from_db(self, username: str, email: str, password: str) -> list:
         """
         Gets user info by username and email and verifies the password.
@@ -491,6 +492,36 @@ class Server:
         )
         await websocket.send(response.json_string)
 
+    async def __handle_login_request(self, websocket: WebSocket, user_id: str, data: dict):
+        client = self.__clients.setdefault(user_id, User())
+        client.main_websocket = websocket
+        client.is_online = True
+
+        public_key = data["long_term_public_key"]
+        client.long_term_public_key = public_key
+        await self.__save_key_to_db(user_id, public_key)
+
+        created_chats_request = Request(
+            request_type="created_chats",
+            content={"created_chats": client.created_chats}
+        )
+        await websocket.send(created_chats_request.json_string)
+        client.created_chats = []
+
+    async def __handle_create_chat_request(self, user_id: str, data: dict):
+        target_user_id = data["target_user_id"]
+        target_client = self.__clients[target_user_id]
+
+        if target_client.is_online:
+            create_chat_request = Request(
+                request_type="create_chat_request",
+                content={"target_user_id": user_id}
+            )
+            await target_client.main_websocket.send(create_chat_request.json_string)
+
+        else:
+            target_client.created_chats.append(user_id)
+
     async def __receive_requests(self, websocket: WebSocket, requests_queue: asyncio.Queue):
         """Function which receives requests from user and adds them to the requests queue"""
         user_id = None
@@ -513,15 +544,15 @@ class Server:
 
     async def __websocket_handler(self, websocket):
         print("New client connected.")
-        shared_user_id_request = await websocket.recv()
-        shared_user_id_request = Request.from_string(shared_user_id_request)
-        user_id = shared_user_id_request.user_id
-        print(f"User id received: {user_id}")
+        # shared_user_id_request = await websocket.recv()
+        # shared_user_id_request = Request.from_string(shared_user_id_request)
+        # user_id = shared_user_id_request.user_id
+        # print(f"User id received: {user_id}")
         requests_queue = asyncio.Queue()
 
-        client = self.__clients.setdefault(user_id, User())
-        client.main_websocket = websocket
-        client.is_online = True
+        # client = self.__clients.setdefault(user_id, User())
+        # client.main_websocket = websocket
+        # client.is_online = True
 
         asyncio.create_task(self.__receive_requests(websocket, requests_queue))
         while True:
@@ -547,8 +578,10 @@ class Server:
                     await self.__handle_send_long_term_public_key_request(user_id, data)
                 case "get_long_term_public_key_request":
                     await self.__handle_get_long_term_public_key_request(websocket, data)
-                case "get_public_key_request":
-                    self.__handle_get_public_key_request(user_id, data)
+                case "login_request":
+                    await self.__handle_login_request(websocket, user_id, data)
+                case "create_chat_request":
+                    await self.__handle_create_chat_request(user_id, data)
 
                 # case "ping_request":
                 #     print("Ping request received")

@@ -58,6 +58,7 @@ async function createChat() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ user_id: userId, target_user_id: targetUserId })
     });
+    console.log("Response from add_chat:", res);
     
     if (res.ok) {
       // Show the chat interface if it was hidden
@@ -213,6 +214,53 @@ function startMessagePolling() {
   }, 2000);
 }
 
+function startNewChatPolling() {
+  setInterval(async () => {
+    if (!userId) return; // Only poll if user is logged in
+    
+    try {
+      const res = await fetch('/api/new_chats');
+      if (!res.ok) return;
+      
+      const newChatIds = await res.json();
+      if (newChatIds.length === 0) return; // No new chats
+      
+      console.log("New chats detected:", newChatIds);
+      
+      // Add each new chat to the UI
+      for (const chatId of newChatIds) {
+        addChatToUI(chatId);
+        
+        // Show notification for the new chat
+        const notification = document.createElement('div');
+        notification.classList.add('notification');
+        notification.textContent = `New chat from ${chatId}`;
+        notification.style.position = 'fixed';
+        notification.style.top = '20px';
+        notification.style.right = '20px';
+        notification.style.background = '#4CAF50';
+        notification.style.color = 'white';
+        notification.style.padding = '10px';
+        notification.style.borderRadius = '5px';
+        notification.style.zIndex = '1000';
+        
+        document.body.appendChild(notification);
+        
+        // Remove the notification after 5 seconds
+        setTimeout(() => notification.remove(), 5000);
+      }
+      
+      // If there are no chats shown currently, update the UI
+      const chatList = document.getElementById("chatList");
+      if (chatList.querySelector('.empty')) {
+        loadChats(); // Reload all chats to refresh the UI
+      }
+    } catch (error) {
+      console.error("Error checking for new chats:", error);
+    }
+  }, 3000); // Check every 3 seconds
+}
+
 async function pollAllChats() {
   // grab every chatId from the sidebar
   const chatIds = Array.from(
@@ -351,4 +399,5 @@ window.onload = () => {
   document.querySelector("#loginOverlay button").onclick = login;
 
   startMessagePolling();
+  startNewChatPolling();
 };
