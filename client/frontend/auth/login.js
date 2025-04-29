@@ -1,4 +1,4 @@
-const socket = new WebSocket("ws://localhost:8000");
+const socket = new WebSocket("ws://localhost:9000");
 
 socket.onopen = () => {
     console.log("✅ WebSocket connected");

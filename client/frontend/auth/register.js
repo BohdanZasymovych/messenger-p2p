@@ -233,7 +233,7 @@ document.querySelector(".login-form").addEventListener("submit", function (event
   
           setTimeout(() => {
             socket.close();
-            window.location.href = `chat.html?user_id=${encodeURIComponent(nickname)}&password=${encodeURIComponent(password)}`;
+            window.location.href = `../chat/chat.html?user_id=${encodeURIComponent(nickname)}&password=${encodeURIComponent(password)}`;
           }, 300);
         } else {
           alert("❌ Registration failed: " + response.content.message);
