@@ -1105,6 +1105,8 @@ class App:
             self.__messages[target_user_id] = []
         self.__messages[target_user_id].append(message_entry)
 
+        asyncio.create_task(self.save_message_to_db(message, is_outgoing=False))
+
         print(f"Received message from {target_user_id}: {message_text}")
 
     async def __receive_server_requests(self):
