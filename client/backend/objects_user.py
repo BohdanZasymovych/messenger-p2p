@@ -583,7 +583,8 @@ class Chat:
 
             message_obj = Message.from_string(message)
             
-            await self.__save_message_to_db(message_obj, is_outgoing=False)
+            if hasattr(self, '_Chat__on_message_save_callback') and callable(self._Chat__on_message_save_callback):
+                asyncio.create_task(self._Chat__on_message_save_callback(message_obj, is_outgoing=False))
     
             if self.__on_message_callback:
                 self.__on_message_callback(message_obj, self.target_user_id)
