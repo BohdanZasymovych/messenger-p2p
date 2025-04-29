@@ -57,7 +57,7 @@ ICE_CONFIG = RTCConfiguration(
     iceServers=ICE_SERVERS
 )
 
-SERVER_URL = "ws://messenger_server:9000"
+SERVER_URL = "ws://10.10.230.5:9000"
 
 class IncorrectRequestTypeError(Exception):
     """Exception which is raised when request with incorrect type is received"""
@@ -790,35 +790,35 @@ class Chat:
     async def get_new_messages_after(self, timestamp):
         """Get messages between users that are newer than specified timestamp"""
         try:
-            conn = await self.get_db_connection()
-            cursor = await conn.cursor()
+            if hasattr(timestamp, 'isoformat'):
+                timestamp = timestamp.isoformat()
+            conn = await asyncpg.connect(self.DATABASE_URL)
             
-            await cursor.execute("""
-                SELECT * FROM messages
-                WHERE ((user_id = %s AND target_user_id = %s)
-                OR (user_id = %s AND target_user_id = %s))
-                AND timestamp > %s
-                ORDER BY timestamp ASC;
-            """, (self.user_id, self.target_user_id, self.target_user_id, self.user_id, timestamp))
-            
-            rows = await cursor.fetchall()
-            await cursor.close()
-            await conn.close()
-            
-            messages = []
-            for row in rows:
-                is_from_me = row[1] == self.user_id  # user_id колонка
-                messages.append({
-                    "sender": "me" if is_from_me else "you",
-                    "text": row[3],  # message колонка
-                    "timestamp": row[5].isoformat()  # timestamp колонка
-                })
+            try:
+                rows = await conn.fetch("""--sql
+                    SELECT * FROM messages
+                    WHERE ((user_id = $1 AND target_user_id = $2)
+                    OR (user_id = $2 AND target_user_id = $1))
+                    AND timestamp > $3::text::timestamp
+                    ORDER BY timestamp ASC;
+                """, self.user_id, self.target_user_id, timestamp)
                 
-            return messages
+                messages = []
+                for row in rows:
+                    is_from_me = row['user_id'] == self.user_id
+                    messages.append({
+                        "sender": "me" if is_from_me else "you",
+                        "text": row['message'],
+                        "timestamp": row['timestamp'].isoformat(),
+                        "id": str(row['id'])
+                    })
+                    
+                return messages
+            finally:
+                await conn.close()
         except Exception as e:
             print(f"Error getting new messages after timestamp: {str(e)}")
             return []
-
 
 class LoginRequest(BaseModel):
     """Class representing login request"""
