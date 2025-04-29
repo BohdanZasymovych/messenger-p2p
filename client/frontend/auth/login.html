@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!-- <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -106,6 +106,143 @@
       <button onclick="window.location.href='registration.html'">Sign Up</button>
     </div>
   </div>
+
+  <script src="login.js"></script>
+</body>
+</html> -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Security App</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(to bottom, black, #242D6F);
+      color: white;
+      text-align: center;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+    .navbar {
+      position: absolute;
+      top: 10px;
+      width: 100%;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      padding: 10px 15px;
+      gap: 20px;
+      font-size: 16px;
+    }
+    .navbar img {
+      position: absolute;
+      left: 15px;
+      top: 5px;
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+    }
+    .navbar span {
+      position: relative;
+      top: -5px;
+    }
+    .login-container {
+      font-size: 18px;
+      font-style: italic;
+      width: 100%;
+      max-width: 400px;
+    }
+    .login-form {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+    }
+    .login-form input {
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0;
+      border: none;
+      border-radius: 5px;
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      text-align: center;
+    }
+    .continue-button {
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0;
+      border: none;
+      border-radius: 5px;
+      background: #1E90FF;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    .switch-auth {
+      margin-top: 15px;
+      font-size: 14px;
+    }
+    .switch-auth button {
+      background: none;
+      border: none;
+      color: #1E90FF;
+      cursor: pointer;
+      font-size: 14px;
+      text-decoration: underline;
+      margin-left: 5px;
+    }
+  </style>
+</head>
+<body>
+  <div class="navbar">
+    <img src="photo_2024-12-02_10-34-48.jpg" alt="Profile Picture">
+    <span>Log in</span>
+  </div>
+
+  <div class="login-container">
+    <p>Welcome back to the world <br> of security</p>
+    <form class="login-form">
+      <input type="email" name="email" placeholder="Enter email" required>
+      <input type="password" name="password" placeholder="Enter password" required>
+      <button class="continue-button" type="submit">Continue</button>
+    </form>
+    <div class="switch-auth">
+      Don't have an account?
+      <button onclick="window.location.href='registration.html'">Sign Up</button>
+    </div>
+  </div>
+
+  <script>
+    document.querySelector(".login-form").addEventListener("submit", function (e) {
+      e.preventDefault();
+
+      const email = document.querySelector("input[name='email']").value.trim();
+      const password = document.querySelector("input[name='password']").value;
+
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
+
+      if (!emailRegex.test(email)) {
+        alert("❌ Please enter a valid email address.");
+        return;
+      }
+
+      if (!passwordRegex.test(password)) {
+        alert("❌ Password must contain at least 8 characters, including uppercase, lowercase, number, and special symbol.");
+        return;
+      }
+
+      // Якщо все валідно — запускається login.js (WebSocket/redirect)
+    });
+  </script>
 
   <script src="login.js"></script>
 </body>
