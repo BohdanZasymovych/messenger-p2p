@@ -98,7 +98,11 @@ async function openChat(targetUserId) {
   const chatWindow = document.getElementById("chatWindow");
   const inputBar = document.getElementById("inputBar");
 
-  if (chatWindow) chatWindow.style.display = "flex";
+  if (chatWindow) {
+    chatWindow.style.display = "flex";
+    chatWindow.style.background = "#0b0b3b";
+  }
+   // 🔷 Стає синім після вибору
   if (inputBar) inputBar.style.display = "flex";
   if (chatHeader) chatHeader.style.display = "flex";
 
@@ -126,7 +130,7 @@ async function openChat(targetUserId) {
     }
 
     const bubble = document.createElement("div");
-    bubble.classList.add("message", msg.sender === "me" ? "sent" : "received");
+    bubble.classList.add("message", msg.sender === userId ? "sent" : "received");
     bubble.textContent = msg.text;
 
     const timeEl = document.createElement("div");
@@ -217,7 +221,7 @@ async function fetchNewMessages(targetUserId) {
       }
 
       const bubble = document.createElement("div");
-      bubble.classList.add("message", msg.sender === "me" ? "sent" : "received");
+      bubble.classList.add("message", msg.sender === userId ? "sent" : "received");
       bubble.textContent = msg.text;
 
       const timeEl = document.createElement("div");
