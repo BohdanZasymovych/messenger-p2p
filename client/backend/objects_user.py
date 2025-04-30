@@ -2548,7 +2548,7 @@ ICE_CONFIG = RTCConfiguration(
     iceServers=ICE_SERVERS
 )
 
-SERVER_URL = "ws://10.10.230.5:9000"
+SERVER_URL = "ws://localhost:9000"
 
 class IncorrectRequestTypeError(Exception):
     """Exception which is raised when request with incorrect type is received"""
