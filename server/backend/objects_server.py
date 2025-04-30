@@ -504,6 +504,25 @@ class Server:
         )
         await websocket.send(success_response.json_string)
 
+    async def __handle_user_existance_request(self, websocket, user_id: str, data: dict):
+        """Checks if user are registred on the server"""
+
+        try:
+            conn = await asyncpg.connect(self.SERVER_DATABASE_URL)
+
+            row = await conn.fetchval(
+                "SELECT EXISTS(SELECT 1 FROM users WHERE user_id = $1)",
+                user_id
+            )
+
+            user_existance_request = Request(
+                request_type="user_existance_response",
+                content={"user_id": user_id, "user_existance": bool(row)}
+            )
+            await websocket.send(user_existance_request.json_string)
+        finally:
+            await conn.close()
+
 
     async def __handle_login_request(self, websocket: WebSocket, user_id: str, data: dict):
         client = self.__clients.setdefault(user_id, User())

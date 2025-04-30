@@ -1125,6 +1125,18 @@ class App:
 
         print(f"Received message from {target_user_id}: {message_text}")
 
+    async def __check_user_existance(self, user_id: str) -> bool:
+        check_user_existance_request = Request(
+            request_type="check_user_existance_request",
+            user_id=self.user_id
+        )
+        self.__futures["check_user_existance_request"] = asyncio.Future()
+        await self.websocket.send(check_user_existance_request.json_string)
+        user_existance_response = await self.__futures["check_user_existance_request"]
+        user_existance_response = Request.from_string
+        return user_existance_response["user_existance"]
+
+
     async def __receive_server_requests(self):
         """Function which receives requests from server and adds them to the requests queue"""
         try:
