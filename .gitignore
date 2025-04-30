@@ -14,6 +14,7 @@
 
 # Keys
 **/keys/
+**/certs/
 
 # Specific files
 **/docker-compose-user-separate.yml

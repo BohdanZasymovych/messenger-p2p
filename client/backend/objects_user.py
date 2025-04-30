@@ -13,6 +13,7 @@ from aiortc import (RTCPeerConnection,
 
 import websockets
 import asyncpg
+import bcrypt
 from websockets.legacy.client import WebSocketClientProtocol
 from websockets.legacy.server import WebSocketServerProtocol
 
@@ -57,7 +58,7 @@ ICE_CONFIG = RTCConfiguration(
     iceServers=ICE_SERVERS
 )
 
-SERVER_URL = "ws://10.10.230.5:9000"
+SERVER_URL = "ws://messenger_server:9000"
 
 class IncorrectRequestTypeError(Exception):
     """Exception which is raised when request with incorrect type is received"""
@@ -772,8 +773,9 @@ class App:
 
         # Add root redirect
         @self.api.get("/")
-        def redirect_to_chat():
-            return RedirectResponse(url="/chat/chat.html")
+        def redirect_to_registration():
+            return RedirectResponse(url="auth/registration.html")
+
 
         # Mount static files LAST - this ensures API routes take priority
         frontend_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend")
@@ -788,13 +790,27 @@ class App:
             try:
                 data = await request.json()
                 user_id = data.get("user_id")
-                print(f"Login attempt with user_id: {user_id}")
+                password = data.get("password")
+
+                if not user_id or not password:
+                    raise HTTPException(status_code=400, detail="Missing user_id or password")
+
+                # async with asyncpg.create_pool(self.DATABASE_URL) as pool:
+                #     async with pool.acquire() as conn:
+                #         row = await conn.fetchrow(
+                #             "SELECT password FROM users WHERE user_id = $1", user_id
+                #         )
+                #         if row is None:
+                #             raise HTTPException(status_code=401, detail="User not found")
+
+                #         hashed = row["password"]
+                #         if not bcrypt.checkpw(password.encode(), hashed.encode()):
+                #             raise HTTPException(status_code=401, detail="Invalid password")
+
                 self.user_id = user_id
                 self.__user_id_set.set()
-                print("Login successful")
                 return {"status": "success", "user_id": user_id}
             except Exception as e:
-                print(f"Login error: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
 
     
@@ -871,13 +887,22 @@ class App:
             return list(self.__chats.keys())
 
         @self.__api_router.post("/add_chat")
-        async def add_chat(data: ChatRequest):
+        async def create_chat(data: ChatRequest):
+            print("Adding chat")
+            target_user_id = data.target_user_id
             try:
                 # Validate the user
-                if data.user_id != self.user_id:
-                    raise HTTPException(status_code=403, detail="Unauthorized access")
+                # if user_id != self.user_id:
+                #     raise HTTPException(status_code=403, detail="Unauthorized access")
+
+                if (target_user_id == self.user_id or
+                    not await self.__check_user_existance(target_user_id)):
+                    print("Invalid user id")
+                    return {"status": "invalid_user_id"}
 
                 await self.on_chat_creation(data.target_user_id)
+                await self.add_chat(data.target_user_id)
+
                 print(f"Chat with {data.target_user_id} added")
                 return {"status": "chat added"}
             except Exception as e:
@@ -1104,7 +1129,22 @@ class App:
             self.__messages[target_user_id] = []
         self.__messages[target_user_id].append(message_entry)
 
+        asyncio.create_task(self.save_message_to_db(message, is_outgoing=False))
+
         print(f"Received message from {target_user_id}: {message_text}")
+
+    async def __check_user_existance(self, user_id: str) -> bool:
+        print("Checking user existance...")
+        check_user_existance_request = Request(
+            request_type="check_user_existance_request",
+            user_id=self.user_id,
+            content={"target_user_id": user_id}
+        )
+        self.__futures["check_user_existance_request"] = asyncio.Future()
+        await self.websocket.send(check_user_existance_request.json_string)
+        user_existance_response = await self.__futures["check_user_existance_request"]
+        print(f"User existance status: {user_existance_response.content['user_existance']}")
+        return user_existance_response.content["user_existance"]
 
     async def __receive_server_requests(self):
         """Function which receives requests from server and adds them to the requests queue"""
@@ -1140,8 +1180,6 @@ class App:
 
     async def on_chat_creation(self, target_user_id: str):
         """Function which is called when chat is created"""
-        await self.add_chat(target_user_id)
-
         create_chat_request = Request(
             request_type="create_chat_request",
             user_id=self.user_id,

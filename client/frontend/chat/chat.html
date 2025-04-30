@@ -5,64 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Chat UI</title>
   <link rel="stylesheet" href="chat.css" />
-  <style>
-    #loginOverlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background-color: rgba(0, 0, 0, 0.8);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 1000;
-    }
-    
-    .login-container {
-      background-color: white;
-      padding: 30px;
-      border-radius: 10px;
-      text-align: center;
-      max-width: 400px;
-      width: 100%;
-    }
-    
-    .login-container h2 {
-      margin-top: 0;
-    }
-    
-    .login-container input {
-      width: 100%;
-      padding: 10px;
-      margin: 15px 0;
-      border: 1px solid #ddd;
-      border-radius: 5px;
-      font-size: 16px;
-      box-sizing: border-box;
-    }
-    
-    .login-container button {
-      padding: 10px 15px;
-      background-color: #4CAF50;
-      color: white;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-      font-size: 16px;
-    }
-  </style>
 </head>
 <body>
-  <div id="loginOverlay">
-    <div class="login-container">
-      <h2>Welcome to Messenger</h2>
-      <p>Please enter your user ID to continue</p>
-      <input type="text" id="loginUserId" placeholder="Your user ID">
-      <button onclick="login()">Start Chatting</button>
-    </div>
-  </div>
-
   <div class="sidebar">
     <h2>Chats</h2>
     <div class="create-chat">
@@ -74,22 +18,27 @@
 
   <div class="chat-window" id="chatWindow">
     <div class="chat-header">
-      <img src="https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y" alt="Contact">
+      <img src="photos/budanov.jpg" alt="Contact">
       <div class="contact-info" id="chatWith">Select a chat</div>
       <div class="buttons">
         <button>📞</button>
+        <button class="map-button" onclick="window.location.href='../map/map.html'">🌍 Map</button>
         <button>⋮</button>
       </div>
     </div>
 
-    <div class="messages" id="messages"></div>
+    <div class="messages" id="messages">
+      <!-- Якщо чат не вибрано, тут буде пусто -->
+    </div>
+
     <div class="input-bar" id="inputBar">
-      <input type="text" id="messageInput" placeholder="Type smth..." onkeypress="handleKeyPress(event)">
+      <input type="text" id="messageInput" placeholder="Type something..." onkeypress="handleKeyPress(event)">
       <button onclick="sendMessage()">Send</button>
     </div>
   </div>
 
-  <a href="map.html" class="map-button">🌍 Open Map</a>
   <script src="chat.js"></script>
+
+  <div id="notification" class="notification"></div>
 </body>
 </html>
