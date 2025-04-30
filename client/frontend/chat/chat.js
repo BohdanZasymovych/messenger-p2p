@@ -3,18 +3,15 @@ let currentTargetUserId = null;
 const lastMessageTimestamps = {};
 const lastMessageDates = {};
 
-// Отримання даних з параметрів URL після реєстрації
 const urlParams = new URLSearchParams(window.location.search);
 const userIdFromUrl = urlParams.get("user_id");
 const passwordFromUrl = urlParams.get("password");
 
-// Одразу логін після завантаження сторінки
 window.onload = () => {
   if (!userIdFromUrl || !passwordFromUrl) {
     alert("Missing user_id or password in URL");
     return;
   }
-
   login(userIdFromUrl, passwordFromUrl);
 };
 
@@ -35,10 +32,15 @@ function login(id, password) {
       userId = user_id;
       console.log("✅ Login successful");
 
-      document.querySelector(".sidebar").style.display = "block";
-      document.querySelector(".map-button").style.display = "block";
-      document.getElementById("chatWindow").style.display = "none";
-      document.getElementById("inputBar").style.display = "none";
+      const sidebar = document.querySelector(".sidebar");
+      const mapButton = document.querySelector(".map-button");
+      const chatWindow = document.getElementById("chatWindow");
+      const inputBar = document.getElementById("inputBar");
+
+      if (sidebar) sidebar.style.display = "block";
+      if (mapButton) mapButton.style.display = "block";
+      if (chatWindow) chatWindow.style.display = "flex";
+      if (inputBar) inputBar.style.display = "none";
 
       loadChats();
       startMessagePolling();
@@ -52,7 +54,6 @@ function login(id, password) {
 async function loadChats() {
   const res = await fetch(`/api/get_chats/${userId}`);
   const chatIds = await res.json();
-
   chatIds.forEach(addChatToUI);
 }
 
@@ -94,7 +95,6 @@ async function openChat(targetUserId) {
   currentTargetUserId = targetUserId;
   document.getElementById("chatWith").textContent = targetUserId;
   document.getElementById("messages").innerHTML = "";
-  document.getElementById("chatWindow").style.display = "flex";
   document.getElementById("inputBar").style.display = "flex";
 
   const res = await fetch(`/api/get_messages/${userId}/${targetUserId}`);

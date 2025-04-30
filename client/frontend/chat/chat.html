@@ -22,14 +22,17 @@
       <div class="contact-info" id="chatWith">Select a chat</div>
       <div class="buttons">
         <button>📞</button>
-        <button onclick="window.location.href='../map/map.html'">🌍 Map</button>
+        <button class="map-button" onclick="window.location.href='../map/map.html'">🌍 Map</button>
         <button>⋮</button>
       </div>
     </div>
 
-    <div class="messages" id="messages"></div>
+    <div class="messages" id="messages">
+      <!-- Якщо чат не вибрано, тут буде пусто -->
+    </div>
+
     <div class="input-bar" id="inputBar">
-      <input type="text" id="messageInput" placeholder="Type smth..." onkeypress="handleKeyPress(event)">
+      <input type="text" id="messageInput" placeholder="Type something..." onkeypress="handleKeyPress(event)">
       <button onclick="sendMessage()">Send</button>
     </div>
   </div>
