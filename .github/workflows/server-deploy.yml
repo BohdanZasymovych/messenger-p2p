@@ -3,7 +3,7 @@ name: Deploy server to Fly
 on:
   push:
     branches:
-      - server-deploy
+      - server-deployment
 
 jobs:
   deploy:
