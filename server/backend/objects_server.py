@@ -77,7 +77,7 @@ class Server:
     def __init__(self, ip: str, port: int):
         self.ip: str = ip
         self.port: int = port
-        self.__clients: dict[User] = {'1': User(), '2': User(), '3': User(), '4': User(), '5': User()} # user_id: User
+        self.__clients: dict[User] = {} # user_id: User
 
     async def __save_message_to_db(self, user_id: str, target_user_id: str, message: str) -> None:
         """Saves message to the database"""
@@ -228,7 +228,7 @@ class Server:
         """Function which handles receiving and processing register_request from user"""
         target_user_id = data["target_user_id"]
         client = self.__clients[user_id]
-        target_client = self.__clients[target_user_id]
+        target_client = self.__clients.setdefault(target_user_id, User())
 
         public_key = data["public_key"]
 
@@ -516,7 +516,7 @@ class Server:
             )
 
             user_existance_request = Request(
-                request_type="user_existance_request",
+                request_type="check_user_existance_request",
                 content={"user_id": user_id, "user_existance": bool(row)}
             )
             await websocket.send(user_existance_request.json_string)

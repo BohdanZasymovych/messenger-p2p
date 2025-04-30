@@ -58,7 +58,7 @@ ICE_CONFIG = RTCConfiguration(
     iceServers=ICE_SERVERS
 )
 
-SERVER_URL = "ws://10.10.230.5:9000"
+SERVER_URL = "ws://messenger_server:9000"
 
 class IncorrectRequestTypeError(Exception):
     """Exception which is raised when request with incorrect type is received"""
@@ -892,7 +892,7 @@ class App:
             return list(self.__chats.keys())
 
         @self.__api_router.post("/add_chat")
-        async def add_chat(data: ChatRequest):
+        async def create_chat(data: ChatRequest):
             print("Adding chat")
             target_user_id = data.target_user_id
             try:
@@ -900,12 +900,14 @@ class App:
                 # if user_id != self.user_id:
                 #     raise HTTPException(status_code=403, detail="Unauthorized access")
 
-                if (target_user_id == self.user_id or 
+                if (target_user_id == self.user_id or
                     not await self.__check_user_existance(target_user_id)):
                     print("Invalid user id")
                     return {"status": "invalid_user_id"}
 
                 await self.on_chat_creation(data.target_user_id)
+                await self.add_chat(data.target_user_id)
+
                 print(f"Chat with {data.target_user_id} added")
                 return {"status": "chat added"}
             except Exception as e:
@@ -933,7 +935,7 @@ class App:
                     """, user_id)
         finally:
             await conn.close()
-    
+
     async def save_message_to_db(self, message: Message, is_outgoing: bool = True) -> None:
         """Saves message to the database"""
         try:
@@ -1010,11 +1012,11 @@ class App:
         except Exception as e:
             print(f"Error retrieving messages from database: {str(e)}")
             return []
-    
+
     async def get_message_history(self, user_id: str, target_user_id: str):
         """Public method to get message history from database"""
         return await self.get_messages_from_db(user_id, target_user_id)
-    
+
     async def get_new_messages_after(self, user_id: str, target_user_id: str, timestamp):
         """Get messages between users that are newer than specified timestamp"""
         try:
@@ -1058,9 +1060,9 @@ class App:
             long_term_public_key=self.__public_key,
             on_message_callback=self.on_message_received
         )
-        
+
         chat._Chat__on_message_save_callback = self.save_message_to_db
-        
+
         self.__chats[target_user_id] = chat
 
         await self.save_chat_to_db(target_user_id)
@@ -1142,7 +1144,7 @@ class App:
         self.__futures["check_user_existance_request"] = asyncio.Future()
         await self.websocket.send(check_user_existance_request.json_string)
         user_existance_response = await self.__futures["check_user_existance_request"]
-        user_existance_response = Request.from_string
+        print(f"User existance status: {user_existance_response.content['user_existance']}")
         return user_existance_response.content["user_existance"]
 
     async def __receive_server_requests(self):
@@ -1179,8 +1181,6 @@ class App:
 
     async def on_chat_creation(self, target_user_id: str):
         """Function which is called when chat is created"""
-        await self.add_chat(target_user_id)
-
         create_chat_request = Request(
             request_type="create_chat_request",
             user_id=self.user_id,
