@@ -173,12 +173,39 @@ async function sendMessage() {
   });
 
   if (res.ok) {
+    // Очистити поле вводу
     input.value = "";
-    await openChat(currentTargetUserId);
+
+    // Додати повідомлення в DOM без перезавантаження чату
+    const msgDate = new Date(timestamp);
+    const dateStr = formatDate(msgDate);
+
+    if (dateStr !== lastMessageDates[currentTargetUserId]) {
+      const dateDiv = document.createElement("div");
+      dateDiv.classList.add("date-divider");
+      dateDiv.textContent = dateStr;
+      document.getElementById("messages").appendChild(dateDiv);
+      lastMessageDates[currentTargetUserId] = dateStr;
+    }
+
+    const bubble = document.createElement("div");
+    bubble.classList.add("message", "sent");
+    bubble.textContent = text;
+
+    const timeEl = document.createElement("div");
+    timeEl.classList.add("message-time");
+    timeEl.textContent = msgDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    bubble.appendChild(timeEl);
+
+    document.getElementById("messages").appendChild(bubble);
+    document.getElementById("messages").scrollTop = document.getElementById("messages").scrollHeight;
+
+    lastMessageTimestamps[currentTargetUserId] = timestamp;
   } else {
     alert("Failed to send message");
   }
 }
+
 
 function handleKeyPress(e) {
   if (e.key === "Enter") sendMessage();
