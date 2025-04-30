@@ -516,7 +516,7 @@ class Server:
             )
 
             user_existance_request = Request(
-                request_type="user_existance_response",
+                request_type="user_existance_request",
                 content={"user_id": user_id, "user_existance": bool(row)}
             )
             await websocket.send(user_existance_request.json_string)
@@ -618,6 +618,8 @@ class Server:
                     await self.__handle_add_user_to_db_request(websocket, data)
                 case "get_user_info_from_data_base":
                     await self.__handle_check_user_exists_request(websocket, data)
+                case "check_user_existance_request":
+                    await self.__handle_user_existance_request(websocket, user_id, data)
 
                 # case "ping_request":
                 #     print("Ping request received")

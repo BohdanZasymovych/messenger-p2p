@@ -251,3 +251,25 @@ body {
 .input-bar button:hover {
   background: #6a0dad;
 }
+
+.notification {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #f44336;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 4px;
+  display: none;
+  z‑index: 1000;
+}
+.notification.show {
+  display: block;
+  animation: fadeOut 3s forwards;
+}
+@keyframes fadeOut {
+  0%   { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { opacity: 0; }
+}

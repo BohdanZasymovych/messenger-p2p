@@ -60,25 +60,43 @@ async function loadChats() {
 async function createChat() {
   const targetUserId = document.getElementById("newChatUserId").value.trim();
   if (!targetUserId) {
-    alert("Please enter a user ID");
+    showNotification("Please enter a user ID");
     return;
   }
 
-  const res = await fetch("/api/add_chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user_id: userId, target_user_id: targetUserId })
-  });
+  try {
+    const res = await fetch("/api/add_chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: userId, target_user_id: targetUserId })
+    });
+    const data = await res.json();
 
-  if (res.ok) {
+    // catch invalid_user_id and show bubble
+    if (!res.ok || data.status === "invalid_user_id") {
+      showNotification("Invalid user ID entered");
+      return;
+    }
+
+    // otherwise proceed as before
     addChatToUI(targetUserId);
     await openChat(targetUserId);
     document.getElementById("newChatUserId").value = "";
     document.getElementById("messageInput").focus();
-  } else {
-    const error = await res.json();
-    alert(`Failed to create chat: ${error.detail}`);
+
+  } catch (err) {
+    console.error("Error creating chat:", err);
+    showNotification("Failed to create chat");
   }
+}
+
+// helper to flash the notification
+function showNotification(message) {
+  const n = document.getElementById("notification");
+  if (!n) return;
+  n.textContent = message;
+  n.classList.add("show");
+  setTimeout(() => n.classList.remove("show"), 3000);
 }
 
 function addChatToUI(targetUserId) {

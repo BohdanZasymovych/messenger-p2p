@@ -893,10 +893,17 @@ class App:
 
         @self.__api_router.post("/add_chat")
         async def add_chat(data: ChatRequest):
+            print("Adding chat")
+            target_user_id = data.target_user_id
             try:
                 # Validate the user
-                if data.user_id != self.user_id:
-                    raise HTTPException(status_code=403, detail="Unauthorized access")
+                # if user_id != self.user_id:
+                #     raise HTTPException(status_code=403, detail="Unauthorized access")
+
+                if (target_user_id == self.user_id or 
+                    not await self.__check_user_existance(target_user_id)):
+                    print("Invalid user id")
+                    return {"status": "invalid_user_id"}
 
                 await self.on_chat_creation(data.target_user_id)
                 print(f"Chat with {data.target_user_id} added")
@@ -959,7 +966,7 @@ class App:
                 await conn.close()
         except Exception as e:
             print(f"Error saving message to database: {str(e)}")
-    
+
     async def get_messages_from_db(self, user_id: str, target_user_id: str, limit=100) -> list:
         """Gets messages between users from the database"""
         try:
@@ -1126,16 +1133,17 @@ class App:
         print(f"Received message from {target_user_id}: {message_text}")
 
     async def __check_user_existance(self, user_id: str) -> bool:
+        print("Checking user existance...")
         check_user_existance_request = Request(
             request_type="check_user_existance_request",
-            user_id=self.user_id
+            user_id=self.user_id,
+            content={"target_user_id": user_id}
         )
         self.__futures["check_user_existance_request"] = asyncio.Future()
         await self.websocket.send(check_user_existance_request.json_string)
         user_existance_response = await self.__futures["check_user_existance_request"]
         user_existance_response = Request.from_string
-        return user_existance_response["user_existance"]
-
+        return user_existance_response.content["user_existance"]
 
     async def __receive_server_requests(self):
         """Function which receives requests from server and adds them to the requests queue"""
