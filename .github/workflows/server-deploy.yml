@@ -1,0 +1,24 @@
+name: Deploy server to Fly
+
+on:
+  push:
+    branches:
+      - server-deploy
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install flyctl
+        uses: superfly/flyctl-actions@v1
+        with:
+          version: latest
+          apiToken: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: Deploy to Fly
+        working-directory: server
+        run: flyctl deploy --remote-only
