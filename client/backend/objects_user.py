@@ -3073,7 +3073,7 @@ class Chat:
                 message = message["message"]
 
             message_obj = Message.from_string(message)
-            
+
             if hasattr(self, '_Chat__on_message_save_callback') and callable(self._Chat__on_message_save_callback):
                 asyncio.create_task(self._Chat__on_message_save_callback(message_obj, is_outgoing=False))
     

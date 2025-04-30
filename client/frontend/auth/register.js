@@ -190,6 +190,18 @@ document.querySelector(".login-form").addEventListener("submit", function (event
       return;
     }
   
+    const emailRegex    = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
+
+    if (!emailRegex.test(email)) {
+        alert("❌ Please enter a valid email address.");
+        return;
+    }
+    if (!passwordRegex.test(password)) {
+        alert("❌ Password must contain at least 8 characters, including uppercase, lowercase, number, and special symbol.");
+        return;
+    }
+
     const socket = new WebSocket("ws://localhost:9000");
   
     socket.onerror = (error) => {
