@@ -562,18 +562,13 @@ class Chat:
         self.is_opened = asyncio.Event()
         self.is_closed = asyncio.Event()
 
-
-    async def get_message_history(self):
-        """Public method to get message history from database"""
-        return await self.__get_messages_from_db()
-
     async def __on_message_received(self):
         while True:
             message = await self.__connection.received_messages_queue.get()
             encryption = message["encryption"]
             if message["public_key"] is not None:
                 self.__encryption.set_peer_public_key(message["public_key"])
-        
+
             if encryption == "long_term_public_key":
                 message = self.__long_term_encryptinon.decrypt(message["message"])
             elif encryption == "public_key":
@@ -910,7 +905,7 @@ class App:
                     """, user_id)
         finally:
             await conn.close()
-    
+
     async def save_message_to_db(self, message: Message, is_outgoing: bool = True) -> None:
         """Saves message to the database"""
         try:
@@ -918,20 +913,24 @@ class App:
             target_user_id = message.target_user_id
             message_content = message.content
 
+            # user_id = self.__symetric_encryption.encrypt(user_id)
+            # target_user_id = self.__symetric_encryption.encrypt(target_user_id)
+            message_content = self.__symetric_encryption.encrypt(message_content)
+
             print(f"Saving message to database: {user_id} -> {target_user_id}: '{message_content[:20]}...'")
 
             conn = await asyncpg.connect(self.DATABASE_URL)
             try:
-                await conn.execute("""--sql
-                    CREATE TABLE IF NOT EXISTS messages (
-                        id SERIAL PRIMARY KEY,
-                        user_id TEXT NOT NULL,
-                        target_user_id TEXT NOT NULL,
-                        message TEXT NOT NULL,
-                        is_outgoing BOOLEAN DEFAULT TRUE,
-                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    );
-                """)
+                # await conn.execute("""--sql
+                #     CREATE TABLE IF NOT EXISTS messages (
+                #         id SERIAL PRIMARY KEY,
+                #         user_id TEXT NOT NULL,
+                #         target_user_id TEXT NOT NULL,
+                #         message TEXT NOT NULL,
+                #         is_outgoing BOOLEAN DEFAULT TRUE,
+                #         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                #     );
+                # """)
 
                 await conn.execute("""--sql
                     INSERT INTO messages (user_id, target_user_id, message, is_outgoing)
@@ -943,22 +942,22 @@ class App:
                 await conn.close()
         except Exception as e:
             print(f"Error saving message to database: {str(e)}")
-    
+
     async def get_messages_from_db(self, user_id: str, target_user_id: str, limit=100) -> list:
         """Gets messages between users from the database"""
         try:
             conn = await asyncpg.connect(self.DATABASE_URL)
             try:
-                await conn.execute("""--sql
-                    CREATE TABLE IF NOT EXISTS messages (
-                        id SERIAL PRIMARY KEY,
-                        user_id TEXT NOT NULL,
-                        target_user_id TEXT NOT NULL,
-                        message TEXT NOT NULL,
-                        is_outgoing BOOLEAN DEFAULT TRUE,
-                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    );
-                """)
+                # await conn.execute("""--sql
+                #     CREATE TABLE IF NOT EXISTS messages (
+                #         id SERIAL PRIMARY KEY,
+                #         user_id TEXT NOT NULL,
+                #         target_user_id TEXT NOT NULL,
+                #         message TEXT NOT NULL,
+                #         is_outgoing BOOLEAN DEFAULT TRUE,
+                #         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                #     );
+                # """)
 
                 rows = await conn.fetch("""--sql
                     SELECT * FROM messages
@@ -976,7 +975,7 @@ class App:
 
                     messages.append({
                         "sender": "me" if is_from_me else "you",
-                        "text": row["message"],
+                        "text": self.__symetric_encryption.decrypt(row["message"]),
                         "timestamp": row["timestamp"].isoformat() if hasattr(row["timestamp"], "isoformat") else str(row["timestamp"]),
                         "id": str(row["id"])
                     })
@@ -987,18 +986,18 @@ class App:
         except Exception as e:
             print(f"Error retrieving messages from database: {str(e)}")
             return []
-    
+
     async def get_message_history(self, user_id: str, target_user_id: str):
         """Public method to get message history from database"""
         return await self.get_messages_from_db(user_id, target_user_id)
-    
+
     async def get_new_messages_after(self, user_id: str, target_user_id: str, timestamp):
         """Get messages between users that are newer than specified timestamp"""
         try:
             if hasattr(timestamp, 'isoformat'):
                 timestamp = timestamp.isoformat()
             conn = await asyncpg.connect(self.DATABASE_URL)
-            
+
             try:
                 rows = await conn.fetch("""--sql
                     SELECT * FROM messages
@@ -1007,13 +1006,13 @@ class App:
                     AND timestamp > $3::text::timestamp
                     ORDER BY timestamp ASC;
                 """, user_id, target_user_id, timestamp)
-                
+
                 messages = []
                 for row in rows:
                     is_from_me = row['user_id'] == user_id
                     messages.append({
                         "sender": "me" if is_from_me else "you",
-                        "text": row['message'],
+                        "text": self.__symetric_encryption.decrypt(row['message']),
                         "timestamp": row['timestamp'].isoformat(),
                         "id": str(row['id'])
                     })
@@ -1035,9 +1034,9 @@ class App:
             long_term_public_key=self.__public_key,
             on_message_callback=self.on_message_received
         )
-        
+
         chat._Chat__on_message_save_callback = self.save_message_to_db
-        
+
         self.__chats[target_user_id] = chat
 
         await self.save_chat_to_db(target_user_id)
