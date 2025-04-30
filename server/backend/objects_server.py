@@ -469,9 +469,8 @@ class Server:
     async def __handle_check_user_exists_request(self, websocket, data: dict):
         """
         Handles login request using email and password.
-        Verifies user credentials and sends back user_id if login is successful.
+        Verifies user credentials and sends back user_id and password if login is successful.
         """
-        user_id = data.get("user_id")
         email = data.get("email")
         password = data.get("password")
 
@@ -486,15 +485,25 @@ class Server:
         user_info = await self.__get_user_info_from_db(email, password)
         user_exists = bool(user_info)
 
-        response = Request(
+        if not user_exists:
+            error_response = Request(
+                request_type="get_user_info_from_data_base_response",
+                content={"status": "error", "message": "Invalid email or password."}
+            )
+            await websocket.send(error_response.json_string)
+            return
+
+        success_response = Request(
             request_type="get_user_info_from_data_base_response",
             content={
                 "status": "success",
-                "user_exists": user_exists,
-                "user_id": user_info["user_id"] if user_exists else None
+                "user_exists": True,
+                "user_id": user_info["user_id"],
+                "password": password  # ⬅️ Додаємо пароль з запиту (не з БД!)
             }
         )
-        await websocket.send(response.json_string)
+        await websocket.send(success_response.json_string)
+
 
     async def __handle_login_request(self, websocket: WebSocket, user_id: str, data: dict):
         client = self.__clients.setdefault(user_id, User())
