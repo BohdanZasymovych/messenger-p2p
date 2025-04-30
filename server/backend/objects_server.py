@@ -10,7 +10,7 @@ import bcrypt
 from websockets.legacy.client import WebSocketClientProtocol
 from websockets.legacy.server import WebSocketServerProtocol
 
-from messages_requests import Request
+from request import Request
 
 
 WebSocket = Union[WebSocketClientProtocol, WebSocketServerProtocol]
@@ -576,17 +576,9 @@ class Server:
 
     async def __websocket_handler(self, websocket):
         print("New client connected.")
-        # shared_user_id_request = await websocket.recv()
-        # shared_user_id_request = Request.from_string(shared_user_id_request)
-        # user_id = shared_user_id_request.user_id
-        # print(f"User id received: {user_id}")
         requests_queue = asyncio.Queue()
-
-        # client = self.__clients.setdefault(user_id, User())
-        # client.main_websocket = websocket
-        # client.is_online = True
-
         asyncio.create_task(self.__receive_requests(websocket, requests_queue))
+
         while True:
             request = await requests_queue.get()
             request_type = request.type
@@ -620,19 +612,11 @@ class Server:
                     await self.__handle_check_user_exists_request(websocket, data)
                 case "check_user_existance_request":
                     await self.__handle_user_existance_request(websocket, user_id, data)
-
-                # case "ping_request":
-                #     print("Ping request received")
-                #     pong_response = Request(
-                #         request_type="ping_request",
-                #         content={}
-                #     )
-                #     await websocket.send(pong_response.json_string)
                 case _:
                     raise IncorrectRequestTypeError(f"Incorrect request type in __websocket_handler ({request_type}).")
 
     async def run(self):
         """Runs websocket server"""
         async with websockets.serve(self.__websocket_handler, self.ip, self.port):
-            print(f"WebSocket server is running on ws://{self.ip}:{self.port}")
+            print("WebSocket server is running")
             await asyncio.Future()

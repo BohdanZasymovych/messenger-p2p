@@ -2,6 +2,9 @@
 **/.venv
 **/venv
 **/env
+**/.venv_server
+**/.venv_client
+
 
 # Logs
 **/*.log
@@ -15,6 +18,3 @@
 # Keys
 **/keys/
 **/certs/
-
-# Specific files
-**/docker-compose-user-separate.yml
