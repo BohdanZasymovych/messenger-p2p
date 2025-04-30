@@ -16,6 +16,7 @@ document.querySelector(".login-form").addEventListener("submit", function (event
       alert("❌ Please enter a valid email address.");
       return;
     }
+  
     if (!passwordRegex.test(password)) {
       alert("❌ Password must contain at least 8 characters, including uppercase, lowercase, number, and special symbol.");
       return;
@@ -33,6 +34,7 @@ document.querySelector(".login-form").addEventListener("submit", function (event
   
       const loginRequest = {
         type: "get_user_info_from_data_base",
+        user_id: "temp", // 👈 Додано для коректності обробки на сервері
         content: {
           email: email,
           password: password
