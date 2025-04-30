@@ -2513,8 +2513,8 @@ from pydantic import BaseModel
 import uvicorn
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
-
-from messages_requests import Request, Message, Encryption, SymetricEncryption
+import json
+from messages_requests import Request, Message, Encryption, SymetricEncryption, MarkerMessage
 
 WebSocket = Union[WebSocketClientProtocol, WebSocketServerProtocol]
 
@@ -3064,23 +3064,33 @@ class Chat:
             encryption = message["encryption"]
             if message["public_key"] is not None:
                 self.__encryption.set_peer_public_key(message["public_key"])
-        
-            if encryption == "long_term_public_key":
-                message = self.__long_term_encryptinon.decrypt(message["message"])
-            elif encryption == "public_key":
-                message = self.__encryption.decrypt(message["message"])
-            else:
-                message = message["message"]
-
-            message_obj = Message.from_string(message)
-
-            if hasattr(self, '_Chat__on_message_save_callback') and callable(self._Chat__on_message_save_callback):
-                asyncio.create_task(self._Chat__on_message_save_callback(message_obj, is_outgoing=False))
-    
-            if self.__on_message_callback:
-                self.__on_message_callback(message_obj, self.target_user_id)
             
-            print(f"Message received and saved: {message_obj}")
+            if encryption == "long_term_public_key":
+                message_text = self.__long_term_encryptinon.decrypt(message["message"])
+            elif encryption == "public_key":
+                message_text = self.__encryption.decrypt(message["message"])
+            else:
+                message_text = message["message"]
+
+            try:
+                # Try to parse as regular message first
+                message_obj = Message.from_string(message_text)
+                
+                # Check if it's a marker message
+                if message_obj.type == "marker":
+                    marker_data = MarkerMessage.from_json(message_obj.content)
+                    # Create a special message object for markers
+                    message_obj.content = f"📍 Location shared: {marker_data.label} (Lat: {marker_data.lat}, Lon: {marker_data.lon})"
+                
+                if hasattr(self, '_Chat__on_message_save_callback') and callable(self._Chat__on_message_save_callback):
+                    asyncio.create_task(self._Chat__on_message_save_callback(message_obj, is_outgoing=False))
+            
+                if self.__on_message_callback:
+                    self.__on_message_callback(message_obj, self.target_user_id)
+                
+                print(f"Message received and saved: {message_obj}")
+            except json.JSONDecodeError:
+                print(f"Received non-JSON message: {message_text[:100]}...")
 
     async def __send_message_to_server(self, message: Message, encryption: str):
         message_json = message.json_string
@@ -3185,9 +3195,21 @@ class Chat:
 
         self.is_closed.set()
 
-    def send_message(self, message: str):
-        """Sends message to the target user"""
-        try:
+    # In objects_user.py - update the send_message method in Chat class
+def send_message(self, message: str):
+    """Sends message to the target user"""
+    try:
+        # Check if this is a marker message (starts with "marker:")
+        if message.startswith("marker:"):
+            marker_json = message[7:]  # Remove the "marker:" prefix
+            marker_data = MarkerMessage.from_json(marker_json)
+            message_obj = Message(
+                message_type="marker",
+                user_id=self.user_id,
+                target_user_id=self.target_user_id,
+                content=marker_json
+            )
+        else:
             message_obj = Message(
                 message_type="message",
                 user_id=self.user_id,
@@ -3195,16 +3217,15 @@ class Chat:
                 content=message
             )
 
-            # asyncio.create_task(self.__save_message_to_db(message_obj, is_outgoing=True))
-            if hasattr(self, '__on_message_save_callback') and callable(self.__on_message_save_callback):
-                asyncio.create_task(self.__on_message_save_callback(message_obj, is_outgoing=True))
+        if hasattr(self, '__on_message_save_callback') and callable(self.__on_message_save_callback):
+            asyncio.create_task(self.__on_message_save_callback(message_obj, is_outgoing=True))
 
-            self.__send_message_queue.put_nowait(message_obj)
+        self.__send_message_queue.put_nowait(message_obj)
 
-            print(f"Message queued for sending to {self.target_user_id}")
-        except Exception as e:
-            print(f"Error in send_message: {str(e)}")
-            raise
+        print(f"Message queued for sending to {self.target_user_id}")
+    except Exception as e:
+        print(f"Error in send_message: {str(e)}")
+        raise
 
 
 class LoginRequest(BaseModel):
@@ -3307,7 +3328,38 @@ class App:
                 return {"status": "success", "user_id": user_id}
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
+        marker_storage = {}
 
+        class MarkerRequest(BaseModel):
+            user_id: str
+            target_user_id: str
+            lat: float
+            lon: float
+            label: str
+
+        @self.__api_router.post("/send_marker")
+        async def send_marker(marker: MarkerRequest):
+            """
+            Endpoint to store a marker sent by a user.
+            """
+            key = (marker.user_id, marker.target_user_id)
+            marker_storage[key] = {
+                "lat": marker.lat,
+                "lon": marker.lon,
+                "label": marker.label
+            }
+            return {"status": "Marker saved successfully"}
+
+        @self.__api_router.get("/get_marker/{user_id}/{target_user_id}")
+        async def get_marker(user_id: str, target_user_id: str):
+            """
+            Endpoint to retrieve a marker for a specific user pair.
+            """
+            key = (user_id, target_user_id)
+            marker = marker_storage.get(key)
+            if not marker:
+                raise HTTPException(status_code=404, detail="Marker not found")
+            return marker
     
         @self.__api_router.get("/get_messages/{user_id}/{target_user_id}")
         async def get_messages(user_id: str, target_user_id: str):

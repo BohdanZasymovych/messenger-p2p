@@ -11,12 +11,14 @@
 <body>
 
 <div id="map"></div>
-<button onclick="goHome()" class="home-button">🏠 Home</button>
+<button onclick="window.location.href='../chat/chat.html'" class="home-button">🏠 Home</button>
 <div class="search-container">
   <input type="text" id="search-input" placeholder="Find a place..." />
   <button onclick="searchPlace()">Search</button>
 </div>
-
+<div id="map-button-container">
+  <button id="send-marker">📍 Send Marker</button>
+</div>
 <div class="map-buttons">
   <button onclick="setRoute()" title="Set route">➡️</button>
   <button onclick="clearAll()" title="Clear all">🧹</button>

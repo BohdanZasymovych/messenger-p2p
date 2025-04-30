@@ -8,6 +8,7 @@ from nacl.public import PrivateKey, PublicKey, Box
 import nacl.secret
 import nacl.utils
 import nacl.pwhash
+from dataclasses import dataclass
 
 
 MESSAGE_NAMESPACE = uuid.UUID("1bc43a13-70f6-49c3-bea7-26f4fcc5b6c8")
@@ -94,6 +95,30 @@ class Message:
     def __str__(self) -> str:
         return f"User {self.user_id} ({self.sending_time}): {self.content}"
 
+@dataclass
+class MarkerMessage:
+    """Class to represent a geolocation marker sent via chat"""
+    lat: float
+    lon: float
+    label: str  # optional message like "I'm here!" or user info
+
+    def to_json(self) -> str:
+        """Convert marker to JSON string"""
+        return json.dumps({
+            "lat": self.lat,
+            "lon": self.lon,
+            "label": self.label
+        })
+
+    @classmethod
+    def from_json(cls, json_string: str) -> 'MarkerMessage':
+        """Create marker from JSON string"""
+        data = json.loads(json_string)
+        return cls(
+            lat=data["lat"],
+            lon=data["lon"],
+            label=data["label"]
+        )
 
 class Request:
     """Class to represent request to the server or from it"""

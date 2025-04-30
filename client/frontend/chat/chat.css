@@ -251,3 +251,22 @@ body {
 .input-bar button:hover {
   background: #6a0dad;
 }
+.map-controls {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.map-controls button {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  background-color: #0084ff;
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.map-controls button:hover {
+  background-color: #006fce;
+}

@@ -81,3 +81,23 @@ html, body {
   .map-buttons button:hover {
     background-color: #eee;
   }
+  #map-button-container {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    z-index: 1000;
+}
+
+#send-marker {
+    padding: 10px 14px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+#send-marker:hover {
+    background-color: #0056b3;
+}

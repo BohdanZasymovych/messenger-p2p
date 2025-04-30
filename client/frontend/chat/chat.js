@@ -1,3 +1,5 @@
+// // ✅ ОНОВЛЕНИЙ chat.js (повна версія з авторизацією через URL та всією логікою чатів)
+
 let userId = null;
 let currentTargetUserId = null;
 const lastMessageTimestamps = {};
@@ -270,3 +272,25 @@ async function fetchNewMessages(targetUserId) {
     }
   }
 }
+document.getElementById('getMarkerButton').addEventListener('click', async function() {
+  if (!currentTargetUserId) {
+    alert("Please select a chat first!");
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/get_marker/${userId}/${currentTargetUserId}`);
+    if (!res.ok) {
+      alert("Failed to fetch marker data.");
+      return;
+    }
+
+    const markerMessage = await res.json();
+    const markerData = JSON.parse(markerMessage.content);
+
+    alert(`Marker received: Latitude: ${markerData.lat}, Longitude: ${markerData.lon}, Label: ${markerData.label}`);
+  } catch (error) {
+    console.error("Error fetching marker:", error);
+    alert("An error occurred while fetching the marker.");
+  }
+});
