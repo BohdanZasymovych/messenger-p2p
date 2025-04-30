@@ -77,7 +77,7 @@ class Server:
     def __init__(self, ip: str, port: int):
         self.ip: str = ip
         self.port: int = port
-        self.__clients: dict[User] = {'1': User(), '2': User(), '3': User(), '4': User(), '5': User()} # user_id: User
+        self.__clients: dict[User] = {} # user_id: User
 
     async def __save_message_to_db(self, user_id: str, target_user_id: str, message: str) -> None:
         """Saves message to the database"""
@@ -228,7 +228,7 @@ class Server:
         """Function which handles receiving and processing register_request from user"""
         target_user_id = data["target_user_id"]
         client = self.__clients[user_id]
-        target_client = self.__clients[target_user_id]
+        target_client = self.__clients.setdefault(target_user_id, User())
 
         public_key = data["public_key"]
 
@@ -504,6 +504,25 @@ class Server:
         )
         await websocket.send(success_response.json_string)
 
+    async def __handle_user_existance_request(self, websocket, user_id: str, data: dict):
+        """Checks if user are registred on the server"""
+        target_user_id = data["target_user_id"]
+        try:
+            conn = await asyncpg.connect(self.SERVER_DATABASE_URL)
+
+            row = await conn.fetchval(
+                "SELECT EXISTS(SELECT 1 FROM users WHERE user_id = $1)",
+                target_user_id
+            )
+
+            user_existance_request = Request(
+                request_type="check_user_existance_request",
+                content={"target_user_id": target_user_id, "user_existance": bool(row)}
+            )
+            await websocket.send(user_existance_request.json_string)
+        finally:
+            await conn.close()
+
 
     async def __handle_login_request(self, websocket: WebSocket, user_id: str, data: dict):
         client = self.__clients.setdefault(user_id, User())
@@ -599,6 +618,8 @@ class Server:
                     await self.__handle_add_user_to_db_request(websocket, data)
                 case "get_user_info_from_data_base":
                     await self.__handle_check_user_exists_request(websocket, data)
+                case "check_user_existance_request":
+                    await self.__handle_user_existance_request(websocket, user_id, data)
 
                 # case "ping_request":
                 #     print("Ping request received")
