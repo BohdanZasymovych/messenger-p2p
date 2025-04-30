@@ -1,0 +1,3 @@
+([('P2P_Messenger',
+   '/Users/user/Documents/OP_2/messenger-p2p/launcher/dist/P2P_Messenger',
+   'EXECUTABLE')],)

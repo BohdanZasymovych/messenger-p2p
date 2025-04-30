@@ -1,0 +1,40 @@
+services:
+  server_database:
+    image: postgres:14
+    container_name: messenger_server_db
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER_SERVER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD_SERVER}"
+      POSTGRES_DB: "${POSTGRES_DB_SERVER}"
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data_server:/var/lib/postgresql/data
+      - ./docker/db_init_server.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - messenger_network
+
+
+  server:
+    build:
+      context: .
+      dockerfile: docker/server.Dockerfile
+    container_name: messenger_server
+    environment:
+      DATABASE_URL_SERVER: "${DATABASE_URL_SERVER}"
+    depends_on:
+      - server_database
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./backend:/app
+    networks:
+      - messenger_network
+
+
+volumes:
+  postgres_data_server:
+
+networks:
+  messenger_network:
+    external: true
