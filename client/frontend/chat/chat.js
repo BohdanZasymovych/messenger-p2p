@@ -38,7 +38,6 @@ function login(id, password) {
       const inputBar = document.getElementById("inputBar");
 
       if (sidebar) sidebar.style.display = "block";
-      if (mapButton) mapButton.style.display = "block";
       if (chatWindow) chatWindow.style.display = "flex";
       if (inputBar) inputBar.style.display = "none";
 
