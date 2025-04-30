@@ -3290,17 +3290,17 @@ class App:
                 if not user_id or not password:
                     raise HTTPException(status_code=400, detail="Missing user_id or password")
 
-                async with asyncpg.create_pool(self.DATABASE_URL) as pool:
-                    async with pool.acquire() as conn:
-                        row = await conn.fetchrow(
-                            "SELECT password FROM users WHERE user_id = $1", user_id
-                        )
-                        if row is None:
-                            raise HTTPException(status_code=401, detail="User not found")
+                # async with asyncpg.create_pool(self.DATABASE_URL) as pool:
+                #     async with pool.acquire() as conn:
+                #         row = await conn.fetchrow(
+                #             "SELECT password FROM users WHERE user_id = $1", user_id
+                #         )
+                #         if row is None:
+                #             raise HTTPException(status_code=401, detail="User not found")
 
-                        hashed = row["password"]
-                        if not bcrypt.checkpw(password.encode(), hashed.encode()):
-                            raise HTTPException(status_code=401, detail="Invalid password")
+                #         hashed = row["password"]
+                #         if not bcrypt.checkpw(password.encode(), hashed.encode()):
+                #             raise HTTPException(status_code=401, detail="Invalid password")
 
                 self.user_id = user_id
                 self.__user_id_set.set()
