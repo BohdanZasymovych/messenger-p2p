@@ -33,13 +33,14 @@ function login(id, password) {
       console.log("✅ Login successful");
 
       const sidebar = document.querySelector(".sidebar");
-      const mapButton = document.querySelector(".map-button");
       const chatWindow = document.getElementById("chatWindow");
       const inputBar = document.getElementById("inputBar");
+      const chatHeader = document.querySelector(".chat-header");
 
       if (sidebar) sidebar.style.display = "block";
-      if (chatWindow) chatWindow.style.display = "flex";
+      if (chatWindow) chatWindow.style.display = "none"; // приховуємо до вибору чату
       if (inputBar) inputBar.style.display = "none";
+      if (chatHeader) chatHeader.style.display = "none";
 
       loadChats();
       startMessagePolling();
@@ -92,9 +93,17 @@ function addChatToUI(targetUserId) {
 
 async function openChat(targetUserId) {
   currentTargetUserId = targetUserId;
+
+  const chatHeader = document.querySelector(".chat-header");
+  const chatWindow = document.getElementById("chatWindow");
+  const inputBar = document.getElementById("inputBar");
+
+  if (chatWindow) chatWindow.style.display = "flex";
+  if (inputBar) inputBar.style.display = "flex";
+  if (chatHeader) chatHeader.style.display = "flex";
+
   document.getElementById("chatWith").textContent = targetUserId;
   document.getElementById("messages").innerHTML = "";
-  document.getElementById("inputBar").style.display = "flex";
 
   const res = await fetch(`/api/get_messages/${userId}/${targetUserId}`);
   const messages = await res.json();

@@ -11,6 +11,19 @@ body {
   overflow: hidden;
 }
 
+/* Приховуємо чатове вікно, верхню панель і поле вводу ДО вибору чату */
+#chatWindow {
+  display: none;
+}
+
+.chat-header {
+  display: none;
+}
+
+.input-bar {
+  display: none;
+}
+
 /* Sidebar styles */
 .sidebar {
   width: 300px;
@@ -209,7 +222,6 @@ body {
 }
 
 .input-bar {
-  display: flex;
   padding: 15px 20px;
   background: #192a56;
   position: sticky;
