@@ -764,7 +764,7 @@ class App:
         # Add CORS middleware
         self.api.add_middleware(
             CORSMiddleware,
-            allow_origins=["*"],
+            allow_origins=["https://localhost:8000"],
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],
@@ -777,7 +777,7 @@ class App:
 
         # Mount static files LAST - this ensures API routes take priority
         frontend_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend")
-        self.api.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
+        self.api.mount("/", StaticFiles(directory=frontend_path, html=True))
 
 
     def __setup_api_routes(self):
@@ -1154,13 +1154,19 @@ class App:
         """Function opening application"""
         # Start the API server
         def start_server():
-            uvicorn.run(self.api, host="0.0.0.0", port=8000)
+            uvicorn.run(
+                self.api,
+                host="0.0.0.0",
+                port=8000,
+                ssl_certfile="/app/certs/cert.pem",
+                ssl_keyfile="/app/certs/key.pem",
+            )
 
         server_thread = threading.Thread(target=start_server)
         server_thread.daemon = True
         server_thread.start()
 
-        print("API server started on http://localhost:8000")
+        print("API server started on https://localhost:8000")
         print("Waiting for user login...")
 
         # Wait for user ID to be set from the frontend

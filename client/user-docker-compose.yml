@@ -25,7 +25,7 @@ services:
     sysctls:
       net.ipv4.ip_local_port_range: "40000 40100"
     ports:
-      - "8000:8000"
+      - "443:8000"
       - "19302:19302/udp"
       - "40000-40100:40000-40100/udp"
     # network_mode: "host"
@@ -33,10 +33,13 @@ services:
       - user_database
     volumes:
       - ./backend:/app/backend
+      - ./frontend:/app/backend/frontend
+      - ./certs:/app/certs
       - encryption_keys:/app/keys
       - message_data:/app/data 
     working_dir: /app
     # command: sh -c "chmod +x start.sh && ./start.sh"
+    command: ["/app/start.sh"]
     networks:
       - messenger_network
 
