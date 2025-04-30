@@ -13,7 +13,6 @@ from aiortc import (RTCPeerConnection,
 
 import websockets
 import asyncpg
-import bcrypt
 from websockets.legacy.client import WebSocketClientProtocol
 from websockets.legacy.server import WebSocketServerProtocol
 
