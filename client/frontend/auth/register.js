@@ -1,4 +1,11 @@
-document.querySelector(".login-form").addEventListener("submit", async function (event) {
+// 🛡️ Хешування пароля через jsSHA
+function hashPasswordSHA256(password) {
+  const shaObj = new jsSHA("SHA-256", "TEXT", { encoding: "UTF8" });
+  shaObj.update(password);
+  return shaObj.getHash("HEX");
+}
+
+document.querySelector(".login-form").addEventListener("submit", function (event) {
   event.preventDefault();
 
   const nickname = document.querySelector("input[name='nickname']").value.trim();
@@ -23,8 +30,8 @@ document.querySelector(".login-form").addEventListener("submit", async function 
     return;
   }
 
-  // 🛡️ Хешуємо пароль
-  const hashedPassword = await hashPasswordSHA256(password);
+  // 🔐 Хешуємо пароль
+  const hashedPassword = hashPasswordSHA256(password);
 
   const socket = new WebSocket("wss://messenger-server.fly.dev");
 
@@ -34,8 +41,6 @@ document.querySelector(".login-form").addEventListener("submit", async function 
   };
 
   socket.onopen = () => {
-    console.log("✅ WebSocket connected");
-
     const registerRequest = {
       type: "add_user_to_data_base",
       user_id: nickname,
@@ -51,13 +56,10 @@ document.querySelector(".login-form").addEventListener("submit", async function 
   };
 
   socket.onmessage = (event) => {
-    console.log("📥 Response received:", event.data);
-
     let response;
     try {
       response = JSON.parse(event.data);
     } catch (e) {
-      console.error("❌ Failed to parse server response:", e);
       alert("Server returned invalid response.");
       socket.close();
       return;
@@ -65,10 +67,8 @@ document.querySelector(".login-form").addEventListener("submit", async function 
 
     if (response.type === "add_user_to_data_base_response") {
       if (response.content.status === "success") {
-        console.log("✅ User registered successfully");
-
         sessionStorage.setItem("user_id", nickname);
-        sessionStorage.setItem("password", password); // незахешований — потрібен для шифрування
+        sessionStorage.setItem("password", password); // зберігаємо plain для подальшого використання
 
         setTimeout(() => {
           socket.close();
@@ -78,8 +78,6 @@ document.querySelector(".login-form").addEventListener("submit", async function 
         alert("❌ Registration failed: " + response.content.message);
         socket.close();
       }
-    } else {
-      console.warn("ℹ️ Unexpected message type:", response.type);
     }
   };
 
@@ -87,11 +85,3 @@ document.querySelector(".login-form").addEventListener("submit", async function 
     console.warn("🔌 WebSocket connection closed");
   };
 });
-
-async function hashPasswordSHA256(password) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(password);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}

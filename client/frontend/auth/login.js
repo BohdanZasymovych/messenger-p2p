@@ -1,4 +1,11 @@
-document.querySelector(".login-form").addEventListener("submit", async function (event) {
+// 🔐 Хешування пароля через jsSHA (SHA-256, HEX)
+function hashPasswordSHA256(password) {
+  const shaObj = new jsSHA("SHA-256", "TEXT", { encoding: "UTF8" });
+  shaObj.update(password);
+  return shaObj.getHash("HEX");
+}
+
+document.querySelector(".login-form").addEventListener("submit", function (event) {
   event.preventDefault();
 
   const email = document.querySelector("input[name='email']").value.trim();
@@ -23,7 +30,7 @@ document.querySelector(".login-form").addEventListener("submit", async function 
   }
 
   // 🛡️ Хешуємо пароль перед надсиланням
-  const hashedPassword = await hashPasswordSHA256(password);
+  const hashedPassword = hashPasswordSHA256(password);
 
   const socket = new WebSocket("wss://messenger-server.fly.dev");
 
@@ -37,7 +44,7 @@ document.querySelector(".login-form").addEventListener("submit", async function 
 
     const loginRequest = {
       type: "get_user_info_from_data_base",
-      user_id: "temp", // або залиш пустим, якщо сервер не використовує
+      user_id: "temp",
       content: {
         email: email,
         password: hashedPassword
@@ -68,7 +75,7 @@ document.querySelector(".login-form").addEventListener("submit", async function 
         const userId = response.content.user_id;
 
         sessionStorage.setItem("user_id", userId);
-        sessionStorage.setItem("password", password); // plain для подальшої роботи з WebSocket
+        sessionStorage.setItem("password", password); // plain — для використання в клієнті
 
         setTimeout(() => {
           socket.close();
@@ -87,11 +94,3 @@ document.querySelector(".login-form").addEventListener("submit", async function 
     console.warn("🔌 WebSocket connection closed");
   };
 });
-
-async function hashPasswordSHA256(password) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(password);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
