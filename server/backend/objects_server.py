@@ -147,8 +147,8 @@ class Server:
 
     async def __add_user_to_db(self, user_id: str, email: str, password: str) -> bool:
         """
-        Adds user to the database with hashed password, if user with given username or email doesn't exist.
-        Returns True if user was added, False if already exists or error occurred.
+        Adds user to the database. Assumes password is already hashed via SHA-256 on the client.
+        Returns True if user was added, False if user already exists or error occurred.
         """
         print(f"📥 Checking if user {user_id} or email {email} already exists...")
 
@@ -170,14 +170,12 @@ class Server:
                 return False
 
             try:
-                print("🔐 Hashing password...")
-                hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-                print("💾 Password hashed, inserting user...")
+                print("💾 Inserting user with client-side hashed password...")
 
                 await conn.execute("""
                     INSERT INTO users (user_id, email, password)
                     VALUES ($1, $2, $3);
-                """, user_id, email, hashed_password)
+                """, user_id, email, password)
 
                 print(f"✅ New user {user_id} inserted into DB.")
                 return True
@@ -194,7 +192,11 @@ class Server:
             print(f"❌ Failed to connect to DB: {conn_err}")
             return False
 
+
     async def __get_user_info_from_db(self, email: str, password: str) -> dict | None:
+        """
+        Checks user credentials. Password is assumed to be hashed SHA-256 from client.
+        """
         conn = await asyncpg.connect(self.SERVER_DATABASE_URL)
         try:
             row = await conn.fetchrow("""
@@ -207,12 +209,13 @@ class Server:
                 return None
 
             stored_password = row["password"]
-            if bcrypt.checkpw(password.encode('utf-8'), stored_password.encode('utf-8')):
+            if password == stored_password:
                 return {"user_id": row["user_id"], "email": row["email"]}
             else:
                 return None
         finally:
             await conn.close()
+
 
     def __disconnect_user(self, user_id: str):
         """Disconnect user with given user id"""
@@ -433,7 +436,7 @@ class Server:
         await self.__clients[user_id].websocket.send(get_public_key_request.json_string)
 
     async def __handle_add_user_to_db_request(self, websocket, data: dict):
-        print("🟡 Entered __handle_add_user_to_db_request")  # 👈 Додаємо лог
+        print("🟡 Entered __handle_add_user_to_db_request")
 
         user_id = data.get("user_id")
         email = data.get("email")
@@ -447,7 +450,7 @@ class Server:
                 content={"status": "error", "message": "Missing username, email, or password."}
             )
             await websocket.send(error_response.json_string)
-            print("❌ Sent error response: missing fields")  # 👈
+            print("❌ Sent error response: missing fields")
             return
 
         success = await self.__add_user_to_db(user_id, email, password)
@@ -466,10 +469,10 @@ class Server:
         print("📤 Sending response to client:", success_response.json_string)
         await websocket.send(success_response.json_string)
 
+
     async def __handle_check_user_exists_request(self, websocket, data: dict):
         """
-        Handles login request using email and password.
-        Verifies user credentials and sends back user_id and password if login is successful.
+        Handles login request using email and hashed password from client.
         """
         email = data.get("email")
         password = data.get("password")
@@ -499,10 +502,11 @@ class Server:
                 "status": "success",
                 "user_exists": True,
                 "user_id": user_info["user_id"],
-                "password": password  # ⬅️ Додаємо пароль з запиту (не з БД!)
+                "password": password  # ⬅️ hashed password from client
             }
         )
         await websocket.send(success_response.json_string)
+
 
     async def __handle_user_existance_request(self, websocket, user_id: str, data: dict):
         """Checks if user are registred on the server"""

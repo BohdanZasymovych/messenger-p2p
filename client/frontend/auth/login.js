@@ -22,9 +22,8 @@ document.querySelector(".login-form").addEventListener("submit", async function 
     return;
   }
 
-  // 🛡 Hash the password before sending
-  const salt = bcrypt.genSaltSync(10);
-  const hashedPassword = bcrypt.hashSync(password, salt);
+  // 🛡️ Хешуємо пароль перед надсиланням
+  const hashedPassword = await hashPasswordSHA256(password);
 
   const socket = new WebSocket("wss://messenger-server.fly.dev");
 
@@ -38,7 +37,7 @@ document.querySelector(".login-form").addEventListener("submit", async function 
 
     const loginRequest = {
       type: "get_user_info_from_data_base",
-      user_id: "temp",
+      user_id: "temp", // або залиш пустим, якщо сервер не використовує
       content: {
         email: email,
         password: hashedPassword
@@ -68,9 +67,8 @@ document.querySelector(".login-form").addEventListener("submit", async function 
 
         const userId = response.content.user_id;
 
-        // Store user data safely
         sessionStorage.setItem("user_id", userId);
-        sessionStorage.setItem("password", password); // plain needed for secure chat comms
+        sessionStorage.setItem("password", password); // plain для подальшої роботи з WebSocket
 
         setTimeout(() => {
           socket.close();
@@ -89,3 +87,11 @@ document.querySelector(".login-form").addEventListener("submit", async function 
     console.warn("🔌 WebSocket connection closed");
   };
 });
+
+async function hashPasswordSHA256(password) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}

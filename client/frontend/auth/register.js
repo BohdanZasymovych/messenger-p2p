@@ -17,14 +17,14 @@ document.querySelector(".login-form").addEventListener("submit", async function 
     alert("❌ Please enter a valid email address.");
     return;
   }
+
   if (!passwordRegex.test(password)) {
     alert("❌ Password must contain at least 8 characters, including uppercase, lowercase, number, and special symbol.");
     return;
   }
 
-  // 🛡 Хешування пароля (клієнтське)
-  const salt = bcrypt.genSaltSync(10);
-  const hashedPassword = bcrypt.hashSync(password, salt);
+  // 🛡️ Хешуємо пароль
+  const hashedPassword = await hashPasswordSHA256(password);
 
   const socket = new WebSocket("wss://messenger-server.fly.dev");
 
@@ -67,9 +67,8 @@ document.querySelector(".login-form").addEventListener("submit", async function 
       if (response.content.status === "success") {
         console.log("✅ User registered successfully");
 
-        // ✅ Зберігаємо user_id та password в sessionStorage
         sessionStorage.setItem("user_id", nickname);
-        sessionStorage.setItem("password", password); 
+        sessionStorage.setItem("password", password); // незахешований — потрібен для шифрування
 
         setTimeout(() => {
           socket.close();
@@ -88,3 +87,11 @@ document.querySelector(".login-form").addEventListener("submit", async function 
     console.warn("🔌 WebSocket connection closed");
   };
 });
+
+async function hashPasswordSHA256(password) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
