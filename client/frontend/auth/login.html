@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Login - Security App</title>
   <style>
@@ -87,6 +87,8 @@
       margin-left: 5px;
     }
   </style>
+  <!-- 🛡 bcryptjs для хешування пароля -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bcryptjs/2.4.3/bcrypt.min.js"></script>
 </head>
 <body>
   <div class="navbar">
@@ -106,30 +108,6 @@
       <button onclick="window.location.href='registration.html'">Sign Up</button>
     </div>
   </div>
-
-  <!-- <script>
-    document.querySelector(".login-form").addEventListener("submit", function (e) {
-      e.preventDefault();
-
-      const email = document.querySelector("input[name='email']").value.trim();
-      const password = document.querySelector("input[name='password']").value;
-
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
-
-      if (!emailRegex.test(email)) {
-        alert("❌ Please enter a valid email address.");
-        return;
-      }
-
-      if (!passwordRegex.test(password)) {
-        alert("❌ Password must contain at least 8 characters, including uppercase, lowercase, number, and special symbol.");
-        return;
-      }
-
-      // Якщо все валідно — запускається login.js (WebSocket/redirect)
-    });
-  </script> -->
 
   <script src="login.js"></script>
 </body>

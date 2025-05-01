@@ -3,16 +3,16 @@ let currentTargetUserId = null;
 const lastMessageTimestamps = {};
 const lastMessageDates = {};
 
-const urlParams = new URLSearchParams(window.location.search);
-const userIdFromUrl = urlParams.get("user_id");
-const passwordFromUrl = urlParams.get("password");
+const userIdFromStorage = sessionStorage.getItem("user_id");
+const passwordFromStorage = sessionStorage.getItem("password");
 
 window.onload = () => {
-  if (!userIdFromUrl || !passwordFromUrl) {
-    alert("Missing user_id or password in URL");
+  if (!userIdFromStorage || !passwordFromStorage) {
+    alert("Missing user session. Please log in again.");
+    window.location.href = "../auth/login.html";
     return;
   }
-  login(userIdFromUrl, passwordFromUrl);
+  login(userIdFromStorage, passwordFromStorage);
 };
 
 function login(id, password) {
@@ -28,20 +28,16 @@ function login(id, password) {
       if (!res.ok) throw new Error("Login failed");
       return res.json();
     })
-    .then(async data => {
+    .then(async () => {
       userId = user_id;
       console.log("✅ Login successful");
 
-      // show sidebar, hide chat window until chats are ready
       document.querySelector(".sidebar").style.display = "block";
       document.getElementById("chatWindow").style.display = "none";
       document.getElementById("inputBar").style.display = "none";
       document.querySelector(".chat-header").style.display = "none";
 
-      // wait until backend finishes loading chats
       await waitForChatsLoaded();
-
-      // now fetch and render chats, then start polling
       await loadChats();
       startMessagePolling();
       startChatPolling();
@@ -83,13 +79,11 @@ async function createChat() {
     });
     const data = await res.json();
 
-    // catch invalid_user_id and show bubble
     if (!res.ok || data.status === "invalid_user_id") {
       showNotification("Invalid user ID entered");
       return;
     }
 
-    // otherwise proceed as before
     addChatToUI(targetUserId);
     await openChat(targetUserId);
     document.getElementById("newChatUserId").value = "";
@@ -130,7 +124,6 @@ async function openChat(targetUserId) {
     chatWindow.style.display = "flex";
     chatWindow.style.background = "#0b0b3b";
   }
-   // 🔷 Стає синім після вибору
   if (inputBar) inputBar.style.display = "flex";
   if (chatHeader) chatHeader.style.display = "flex";
 
@@ -201,10 +194,8 @@ async function sendMessage() {
   });
 
   if (res.ok) {
-    // Очистити поле вводу
     input.value = "";
 
-    // Додати повідомлення в DOM без перезавантаження чату
     const msgDate = new Date(timestamp);
     const dateStr = formatDate(msgDate);
 
@@ -308,6 +299,5 @@ async function pollNewChats() {
   const { new_chats } = await res.json();
   new_chats.forEach(id => {
     addChatToUI(id);
-    // optionally auto‑open or flash a notification
   });
 }
