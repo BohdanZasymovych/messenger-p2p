@@ -22,7 +22,7 @@ document.querySelector(".login-form").addEventListener("submit", function (event
       return;
     }
   
-    const socket = new WebSocket("ws://localhost:9000");
+    const socket = new WebSocket("wss://messenger-server.fly.dev");
   
     socket.onerror = (error) => {
       console.error("❌ WebSocket error:", error);
