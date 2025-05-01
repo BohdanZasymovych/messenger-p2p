@@ -3,14 +3,10 @@ services:
     image: postgres:14
     container_name: messenger_user_db
     environment:
-      POSTGRES_USER: "messenger_user"
-      POSTGRES_PASSWORD: "postgres_password"
-      POSTGRES_DB: "messenger_user_db"
-      DATABASE_URL_CLIENT: "postgresql://messenger_user:postgres_password@user_database:5432/messenger_user_db"
-      # POSTGRES_USER: "${POSTGRES_USER_CLIENT}"
-      # POSTGRES_PASSWORD: "${POSTGRES_PASSWORD_CLIENT}"
-      # POSTGRES_DB: "${POSTGRES_DB_CLIENT}"
-      # DATABASE_URL_CLIENT: "${DATABASE_URL_CLIENT}"
+      POSTGRES_USER: "${POSTGRES_USER_CLIENT}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD_CLIENT}"
+      POSTGRES_DB: "${POSTGRES_DB_CLIENT}"
+      DATABASE_URL_CLIENT: "${DATABASE_URL_CLIENT}"
     ports:
       - "5434:5432"
     volumes:
