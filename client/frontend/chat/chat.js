@@ -28,27 +28,38 @@ function login(id, password) {
       if (!res.ok) throw new Error("Login failed");
       return res.json();
     })
-    .then(data => {
+    .then(async data => {
       userId = user_id;
       console.log("✅ Login successful");
 
-      const sidebar = document.querySelector(".sidebar");
-      const chatWindow = document.getElementById("chatWindow");
-      const inputBar = document.getElementById("inputBar");
-      const chatHeader = document.querySelector(".chat-header");
+      // show sidebar, hide chat window until chats are ready
+      document.querySelector(".sidebar").style.display = "block";
+      document.getElementById("chatWindow").style.display = "none";
+      document.getElementById("inputBar").style.display = "none";
+      document.querySelector(".chat-header").style.display = "none";
 
-      if (sidebar) sidebar.style.display = "block";
-      if (chatWindow) chatWindow.style.display = "none"; // приховуємо до вибору чату
-      if (inputBar) inputBar.style.display = "none";
-      if (chatHeader) chatHeader.style.display = "none";
+      // wait until backend finishes loading chats
+      await waitForChatsLoaded();
 
-      loadChats();
+      // now fetch and render chats, then start polling
+      await loadChats();
       startMessagePolling();
+      startChatPolling();
     })
     .catch(err => {
       console.error("Login error:", err);
       alert("Login failed: " + (err.message || "Unknown error"));
     });
+}
+
+async function waitForChatsLoaded() {
+  while (true) {
+    const res = await fetch("/api/chats_loaded");
+    if (!res.ok) throw new Error("Failed to check chats_loaded");
+    const { loaded } = await res.json();
+    if (loaded) return;
+    await new Promise(r => setTimeout(r, 300));
+  }
 }
 
 async function loadChats() {
@@ -90,7 +101,6 @@ async function createChat() {
   }
 }
 
-// helper to flash the notification
 function showNotification(message) {
   const n = document.getElementById("notification");
   if (!n) return;
@@ -224,19 +234,12 @@ async function sendMessage() {
   }
 }
 
-
 function handleKeyPress(e) {
   if (e.key === "Enter") sendMessage();
 }
 
 function startMessagePolling() {
   setInterval(pollAllChats, 2000);
-}
-
-async function pollAllChats() {
-  const chatIds = Array.from(document.querySelectorAll("#chatList li[data-user-id]"))
-    .map(li => li.getAttribute("data-user-id"));
-  for (const id of chatIds) await fetchNewMessages(id);
 }
 
 async function fetchNewMessages(targetUserId) {
@@ -287,4 +290,24 @@ async function fetchNewMessages(targetUserId) {
       li.appendChild(badge);
     }
   }
+}
+
+async function pollAllChats() {
+  const chatIds = Array.from(document.querySelectorAll("#chatList li[data-user-id]"))
+    .map(li => li.getAttribute("data-user-id"));
+  for (const id of chatIds) await fetchNewMessages(id);
+}
+
+function startChatPolling() {
+  setInterval(pollNewChats, 2000);
+}
+
+async function pollNewChats() {
+  const res = await fetch("/api/new_chats");
+  if (!res.ok) return;
+  const { new_chats } = await res.json();
+  new_chats.forEach(id => {
+    addChatToUI(id);
+    // optionally auto‑open or flash a notification
+  });
 }

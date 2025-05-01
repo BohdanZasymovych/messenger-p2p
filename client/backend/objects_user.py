@@ -795,18 +795,6 @@ class App:
                 if not user_id or not password:
                     raise HTTPException(status_code=400, detail="Missing user_id or password")
 
-                # async with asyncpg.create_pool(self.DATABASE_URL) as pool:
-                #     async with pool.acquire() as conn:
-                #         row = await conn.fetchrow(
-                #             "SELECT password FROM users WHERE user_id = $1", user_id
-                #         )
-                #         if row is None:
-                #             raise HTTPException(status_code=401, detail="User not found")
-
-                #         hashed = row["password"]
-                #         if not bcrypt.checkpw(password.encode(), hashed.encode()):
-                #             raise HTTPException(status_code=401, detail="Invalid password")
-
                 self.user_id = user_id
                 self.__user_id_set.set()
                 return {"status": "success", "user_id": user_id}
@@ -891,10 +879,6 @@ class App:
             print("Adding chat")
             target_user_id = data.target_user_id
             try:
-                # Validate the user
-                # if user_id != self.user_id:
-                #     raise HTTPException(status_code=403, detail="Unauthorized access")
-
                 if (target_user_id == self.user_id or
                     not await self.__check_user_existance(target_user_id)):
                     print("Invalid user id")
@@ -910,10 +894,10 @@ class App:
 
         @self.__api_router.get("/new_chats")
         async def get_new_chats():
-            """Return new chats that were created by other users and clear the list"""
-            new_chats = self.__new_chats.copy()
-            self.__new_chats = []  # Clear the list after retrieval
-            return new_chats
+            """Return chats created by others since last poll"""
+            new = list(self.__new_chats)
+            self.__new_chats.clear()
+            return {"new_chats": new}
 
     async def save_chat_to_db(self, target_user_id: str | list[str]):
         """Adds chat with the target user to database"""
@@ -938,25 +922,12 @@ class App:
             target_user_id = message.target_user_id
             message_content = message.content
 
-            # user_id = self.__symetric_encryption.encrypt(user_id)
-            # target_user_id = self.__symetric_encryption.encrypt(target_user_id)
             message_content = self.__symetric_encryption.encrypt(message_content)
 
             print(f"Saving message to database: {user_id} -> {target_user_id}: '{message_content[:20]}...'")
 
             conn = await asyncpg.connect(self.DATABASE_URL)
             try:
-                # await conn.execute("""--sql
-                #     CREATE TABLE IF NOT EXISTS messages (
-                #         id SERIAL PRIMARY KEY,
-                #         user_id TEXT NOT NULL,
-                #         target_user_id TEXT NOT NULL,
-                #         message TEXT NOT NULL,
-                #         is_outgoing BOOLEAN DEFAULT TRUE,
-                #         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                #     );
-                # """)
-
                 await conn.execute("""--sql
                     INSERT INTO messages (user_id, target_user_id, message, is_outgoing)
                     VALUES ($1, $2, $3, $4);
@@ -973,17 +944,6 @@ class App:
         try:
             conn = await asyncpg.connect(self.DATABASE_URL)
             try:
-                # await conn.execute("""--sql
-                #     CREATE TABLE IF NOT EXISTS messages (
-                #         id SERIAL PRIMARY KEY,
-                #         user_id TEXT NOT NULL,
-                #         target_user_id TEXT NOT NULL,
-                #         message TEXT NOT NULL,
-                #         is_outgoing BOOLEAN DEFAULT TRUE,
-                #         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                #     );
-                # """)
-
                 rows = await conn.fetch("""--sql
                     SELECT * FROM messages
                     WHERE (user_id = $1 AND target_user_id = $2)
@@ -1041,7 +1001,7 @@ class App:
                         "timestamp": row['timestamp'].isoformat(),
                         "id": str(row['id'])
                     })
-                    
+
                 return messages
             finally:
                 await conn.close()
