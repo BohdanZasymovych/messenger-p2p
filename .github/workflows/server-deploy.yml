@@ -14,10 +14,13 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Install flyctl
-        uses: superfly/flyctl-actions@v1
-        with:
-          version: latest
-          apiToken: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          curl -L https://fly.io/install.sh | sh
+      - name: Add flyctl to PATH
+        run: echo "$HOME/.fly/bin" >> $GITHUB_PATH
+
+      - name: Authenticate to Fly
+        run: flyctl auth login --access-token "${{ secrets.FLY_API_TOKEN }}"
 
       - name: Deploy to Fly
         working-directory: server
