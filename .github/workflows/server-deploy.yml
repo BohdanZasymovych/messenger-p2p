@@ -16,6 +16,7 @@ jobs:
       - name: Install flyctl
         run: |
           curl -L https://fly.io/install.sh | sh
+
       - name: Add flyctl to PATH
         run: echo "$HOME/.fly/bin" >> $GITHUB_PATH
 
@@ -24,4 +25,4 @@ jobs:
 
       - name: Deploy to Fly
         working-directory: server
-        run: flyctl deploy --remote-only
+        run: flyctl deploy
