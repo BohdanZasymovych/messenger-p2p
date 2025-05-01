@@ -525,16 +525,16 @@ class Connection:
         if not self.is_connected_websocket:
             await self.connect_to_server(public_key)
 
-        if self.p2p_connection_state == "connecting":
-            try:
-                await asyncio.wait_for(self.is_p2p_connected.wait(), 10)
-            except asyncio.TimeoutError:
-                print("Connection timeout in Connection.connect().")
-                self.is_p2p_connected.clear()
-                self.p2p_connection_state = "disconnected"
-                self.is_p2p_connection_failed = True
+        # if self.p2p_connection_state == "connecting":
+        #     try:
+        #         await asyncio.wait_for(self.is_p2p_connected.wait(), 10)
+        #     except asyncio.TimeoutError:
+        #         print("Connection timeout in Connection.connect().")
+        #         self.is_p2p_connected.clear()
+        #         self.p2p_connection_state = "disconnected"
+        #         self.is_p2p_connection_failed = True
 
-        peer_public_key = await self.connect_to_peer()
+        # peer_public_key = await self.connect_to_peer()
         return peer_public_key
 
 
@@ -621,15 +621,19 @@ class Chat:
             await self.__send_message_to_server(message, encryption="long_term_public_key")
             return
 
-        if connection.is_p2p_connection_failed:
+        else:
             await self.__send_message_to_server(message, encryption="public_key")
             return
 
-        if connection.p2p_connection_state == "connected":
-            connection.data_channel.send(message.json_string)
-            return
+        # if connection.is_p2p_connection_failed:
+        #     await self.__send_message_to_server(message, encryption="public_key")
+        #     return
 
-        raise ValueError("Unexpected connection state.")
+        # if connection.p2p_connection_state == "connected":
+        #     connection.data_channel.send(message.json_string)
+        #     return
+
+        # raise ValueError("Unexpected connection state.")
 
     async def __send_message_loop(self):
         """If message queue is not empty gets message from it and sends it"""
