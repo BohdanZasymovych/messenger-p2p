@@ -97,8 +97,24 @@
   <div class="login-container">
     <p>Welcome back to the world <br> of security</p>
     <form class="login-form">
-      <input type="email" name="email" placeholder="Enter email" required>
-      <input type="password" name="password" placeholder="Enter password" required>
+      <input
+        type="email"
+        name="email"
+        placeholder="Enter email"
+        required
+        pattern="^[^\s@]+@[^\s@]+\.[^\s@]+$"
+        title='Електронна адреса має містити знак "@". Наприклад: user@example.com'
+      >
+
+      <input
+        type="password"
+        name="password"
+        placeholder="Enter password"
+        required
+        pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$"
+        title="Пароль має містити щонайменше 8 символів, включаючи велику і малу літери, цифру та спеціальний символ."
+      >
+
       <button class="continue-button" type="submit">Continue</button>
     </form>
     <div class="switch-auth">
