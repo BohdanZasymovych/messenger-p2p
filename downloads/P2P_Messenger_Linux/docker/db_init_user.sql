@@ -1,0 +1,13 @@
+CREATE TABLE IF NOT EXISTS messages (
+    id SERIAL PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    target_user_id TEXT NOT NULL,
+    message TEXT NOT NULL,
+    is_outgoing BOOLEAN DEFAULT TRUE,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS chats (
+    target_user_id TEXT PRIMARY KEY,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
