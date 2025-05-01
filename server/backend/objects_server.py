@@ -72,7 +72,7 @@ class User:
 
 class Server:
     """Class to represent server which handles establishing connection between users"""
-    SERVER_DATABASE_URL = os.getenv("DATABASE_URL_SERVER")
+    SERVER_DATABASE_URL = os.getenv("DATABASE_URL")
 
     def __init__(self, ip: str, port: int):
         self.ip: str = ip
