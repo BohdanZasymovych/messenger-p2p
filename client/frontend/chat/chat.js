@@ -33,7 +33,8 @@ function login(id, password) {
       console.log("✅ Login successful");
 
       document.querySelector(".sidebar").style.display = "block";
-      document.getElementById("chatWindow").style.display = "none";
+      // document.getElementById("chatWindow").style.display = "none";
+      document.getElementById("chatWindow").style.display = "flex";
       document.getElementById("inputBar").style.display = "none";
       document.querySelector(".chat-header").style.display = "none";
 
@@ -68,6 +69,11 @@ async function createChat() {
   const targetUserId = document.getElementById("newChatUserId").value.trim();
   if (!targetUserId) {
     showNotification("Please enter a user ID");
+    return;
+  }
+
+  if (document.querySelector(`#chatList li[data-user-id="${targetUserId}"]`)) {
+    showNotification("Chat already exists");
     return;
   }
 
@@ -114,6 +120,9 @@ function addChatToUI(targetUserId) {
 }
 
 async function openChat(targetUserId) {
+  const ph = document.getElementById("noChatPlaceholder");
+  if (ph) ph.style.display = "none";
+
   currentTargetUserId = targetUserId;
 
   const chatHeader = document.querySelector(".chat-header");
@@ -122,7 +131,6 @@ async function openChat(targetUserId) {
 
   if (chatWindow) {
     chatWindow.style.display = "flex";
-    chatWindow.style.background = "#0b0b3b";
   }
   if (inputBar) inputBar.style.display = "flex";
   if (chatHeader) chatHeader.style.display = "flex";
