@@ -89,26 +89,39 @@
   </style>
 </head>
 <body>
-  <div class="navbar">
-    <img src="photo_2024-12-02_10-34-48.jpg" alt="Profile Picture">
-    <span>Sign up</span>
-  </div>
 
   <div class="login-container">
     <p>Welcome to the world <br> of security</p>
     <form class="login-form">
-      <input type="text" name="nickname" placeholder="Enter nickname">
-      <input type="email" name="email" placeholder="Enter email" required>
-      <input type="password" name="password" placeholder="Enter password" required>
+      <input type="text" name="nickname" placeholder="Enter nickname" required>
+
+      <input
+        type="email"
+        name="email"
+        placeholder="Enter email"
+        required
+        pattern="^[^\s@]+@[^\s@]+\.[^\s@]+$"
+        title='Email must contain "@" symbol. For example: user@example.com'
+      >
+
+      <input
+        type="password"
+        name="password"
+        placeholder="Enter password"
+        required
+        pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$"
+        title="Password must contain at least 8 characters, including uppercase and lowercase latin letters, a digit, and a special character."
+      >
+
       <button class="continue-button" type="submit">Continue</button>
     </form>
+
     <div class="switch-auth">
       Already registered?
       <button onclick="window.location.href='login.html'">Log In</button>
     </div>
   </div>
 
-  <!-- ✅ Підключаємо jsSHA до register.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jsSHA/3.2.0/sha.js"></script>
   <script src="register.js"></script>
 </body>

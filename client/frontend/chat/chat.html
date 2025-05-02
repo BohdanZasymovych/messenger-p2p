@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Chat UI</title>
-  <link rel="stylesheet" href="chat.css" />
+  <link rel="stylesheet" href="chat.css?v=1.0.1" />
 </head>
 <body>
   <div class="sidebar">
@@ -18,17 +18,15 @@
 
   <div class="chat-window" id="chatWindow">
     <div class="chat-header">
-      <img src="photos/budanov.jpg" alt="Contact">
       <div class="contact-info" id="chatWith">Select a chat</div>
       <div class="buttons">
-        <button>📞</button>
+        <!-- <button>📞</button> -->
         <button class="map-button" onclick="window.location.href='../map/map.html'">🌍 Map</button>
         <button>⋮</button>
       </div>
     </div>
 
     <div class="messages" id="messages">
-      <!-- Якщо чат не вибрано, тут буде пусто -->
     </div>
 
     <div class="input-bar" id="inputBar">
