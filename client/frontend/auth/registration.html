@@ -89,10 +89,6 @@
   </style>
 </head>
 <body>
-  <div class="navbar">
-    <img src="photo_2024-12-02_10-34-48.jpg" alt="Profile Picture">
-    <span>Sign up</span>
-  </div>
 
   <div class="login-container">
     <p>Welcome to the world <br> of security</p>
@@ -105,7 +101,7 @@
         placeholder="Enter email"
         required
         pattern="^[^\s@]+@[^\s@]+\.[^\s@]+$"
-        title='Електронна адреса має містити знак "@". Наприклад: user@example.com'
+        title='Email must contain "@" symbol. For example: user@example.com'
       >
 
       <input
@@ -114,7 +110,7 @@
         placeholder="Enter password"
         required
         pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$"
-        title="Пароль має містити щонайменше 8 символів, включаючи велику і малу літери, цифру та спеціальний символ."
+        title="Password must contain at least 8 characters, including uppercase and lowercase latin letters, a digit, and a special character."
       >
 
       <button class="continue-button" type="submit">Continue</button>

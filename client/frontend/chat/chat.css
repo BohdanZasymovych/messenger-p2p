@@ -11,7 +11,6 @@ body {
   overflow: hidden;
 }
 
-/* Приховуємо чатове вікно, верхню панель і поле вводу ДО вибору чату */
 #chatWindow {
   display: none;
 }
@@ -34,8 +33,9 @@ body {
 }
 
 .sidebar h2 { 
-  color: purple; 
-  text-align: center; 
+  color: rgb(128, 0, 128);
+  font-size: 20px;
+  text-align: center;
   padding: 15px 10px;
   background: #d0e4ff;
   position: sticky;
