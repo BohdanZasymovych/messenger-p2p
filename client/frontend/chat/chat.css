@@ -116,6 +116,7 @@ body {
 }
 
 .chat-list li {
+  position: relative;
   padding: 10px;
   background: #d0e4ff;
   margin: 10px;
@@ -123,6 +124,19 @@ body {
   border-radius: 5px;
   text-align: center;
   border: 1px solid #aac8ff;
+}
+
+/* the little red “unread” dot */
+.chat-list li .unread-dot {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 8px;
+  background: red;
+  border-radius: 50%;
+  pointer-events: none;
 }
 
 .chat-list li:hover { 

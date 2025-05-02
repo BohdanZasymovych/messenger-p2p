@@ -1,5 +1,6 @@
 let userId = null;
 let currentTargetUserId = null;
+let initialLoadComplete = false;
 const lastMessageTimestamps = {};
 const lastMessageDates = {};
 
@@ -13,6 +14,7 @@ window.onload = () => {
     return;
   }
   login(userIdFromStorage, passwordFromStorage);
+  initialLoadComplete = true;
 };
 
 function login(id, password) {
@@ -122,6 +124,13 @@ function addChatToUI(targetUserId) {
 async function openChat(targetUserId) {
   const ph = document.getElementById("noChatPlaceholder");
   if (ph) ph.style.display = "none";
+
+  // remove any existing dot for this chat (marks it read)
+  const li = document.querySelector(`#chatList li[data-user-id="${targetUserId}"]`);
+  if (li) {
+    const dot = li.querySelector(".unread-dot");
+    if (dot) dot.remove();
+  }
 
   currentTargetUserId = targetUserId;
 
@@ -281,12 +290,14 @@ async function fetchNewMessages(targetUserId) {
 
     document.getElementById("messages").scrollTop = document.getElementById("messages").scrollHeight;
   } else {
-    const li = document.querySelector(`#chatList li[data-user-id="${targetUserId}"]`);
-    if (li && !li.querySelector(".badge")) {
-      const badge = document.createElement("span");
-      badge.classList.add("badge");
-      badge.textContent = "•";
-      li.appendChild(badge);
+    // only mark if it's not the currently open chat
+    if (initialLoadComplete && targetUserId !== currentTargetUserId) {
+      const li = document.querySelector(`#chatList li[data-user-id="${targetUserId}"]`);
+      if (li && !li.querySelector(".unread-dot")) {
+        const dot = document.createElement("span");
+        dot.classList.add("unread-dot");
+        li.appendChild(dot);
+      }
     }
   }
 }
