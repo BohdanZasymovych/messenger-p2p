@@ -1,6 +1,9 @@
 let userId = null;
 let currentTargetUserId = null;
 let initialLoadComplete = false;
+
+let messagePollingInterval;
+let chatPollingInterval;
 const lastMessageTimestamps = {};
 const lastMessageDates = {};
 
@@ -49,6 +52,49 @@ function login(id, password) {
       console.error("Login error:", err);
       alert("Login failed: " + (err.message || "Unknown error"));
     });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  // Find the close button and attach the event listener
+  const closeButton = document.querySelector('.close-button');
+  if (closeButton) {
+    closeButton.addEventListener('click', closeApplication);
+  }
+});
+
+// Function to handle application closing
+function closeApplication() {
+  showNotification("Closing application...");
+  
+  // Send close request to backend
+  fetch("/api/close_application", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" }
+  })
+  .then(res => {
+    if (!res.ok) throw new Error("Failed to close application");
+    return res.json();
+  })
+  .then(() => {
+    console.log("Application closing...");
+    
+    // Stop all polling intervals
+    if (window.messagePollingInterval) clearInterval(window.messagePollingInterval);
+    if (window.chatPollingInterval) clearInterval(window.chatPollingInterval);
+    
+    // Clear session data
+    sessionStorage.removeItem("user_id");
+    sessionStorage.removeItem("password");
+    
+    // Give server time to process the close request
+    setTimeout(() => {
+      window.location.href = "../close-page/close_page.html";
+    }, 1000);
+  })
+  .catch(err => {
+    console.error("Error closing application:", err);
+    showNotification("Failed to close application");
+  });
 }
 
 async function waitForChatsLoaded() {
@@ -247,7 +293,7 @@ function handleKeyPress(e) {
 }
 
 function startMessagePolling() {
-  setInterval(pollAllChats, 2000);
+  window.messagePollingInterval = setInterval(pollAllChats, 2000);
 }
 
 async function fetchNewMessages(targetUserId) {
@@ -309,7 +355,7 @@ async function pollAllChats() {
 }
 
 function startChatPolling() {
-  setInterval(pollNewChats, 2000);
+  window.chatPollingInterval = setInterval(pollNewChats, 2000);
 }
 
 async function pollNewChats() {

@@ -8,7 +8,10 @@
 </head>
 <body>
   <div class="sidebar">
-    <h2>Chats</h2>
+    <div class="sidebar-header">
+      <button class="close-button">Close</button>
+      <h2>Chats</h2>
+    </div>
     <div class="create-chat">
       <input type="text" id="newChatUserId" placeholder="Enter user ID..." />
       <button onclick="createChat()">➕ Add Chat</button>
@@ -20,7 +23,6 @@
     <div class="chat-header">
       <div class="contact-info" id="chatWith">Select a chat</div>
       <div class="buttons">
-        <!-- <button>📞</button> -->
         <button class="map-button" onclick="window.location.href='../map/map.html'">🌍 Map</button>
         <button>⋮</button>
       </div>

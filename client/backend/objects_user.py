@@ -759,6 +759,9 @@ class App:
 
         # User ID event to signal when user ID is set
         self.__user_id_set = threading.Event()
+        self.__application_close_event = threading.Event()
+        self.__close_initialized = False
+        
 
         # Setup API routes BEFORE including router
         self.__setup_api_routes()
@@ -805,14 +808,13 @@ class App:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
 
-    
         @self.__api_router.get("/get_messages/{user_id}/{target_user_id}")
         async def get_messages(user_id: str, target_user_id: str):
             """Get messages between user_id and target_user_id"""
             if user_id != self.user_id:
                 print(f"User mismatch: {user_id} vs {self.user_id}")
                 raise HTTPException(status_code=403, detail="Unauthorized access")
-    
+
             return await self.get_message_history(user_id, target_user_id)
 
         @self.__api_router.get("/get_new_messages/{user_id}/{target_user_id}/{last_timestamp}")
@@ -902,6 +904,20 @@ class App:
             new = list(self.__new_chats)
             self.__new_chats.clear()
             return {"new_chats": new}
+
+        @self.__api_router.post("/close_application")
+        async def close_application():
+            """Close the application"""
+            try:
+                self.__application_close_event.set()
+                return {"status": "closing"}
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+
+    async def __wait_for_close(self):
+        self.__application_close_event.wait()
+        self.__close_initialized = True
+        await self.close()
 
     async def save_chat_to_db(self, target_user_id: str | list[str]):
         """Adds chat with the target user to database"""
@@ -1167,7 +1183,11 @@ class App:
 
         # Wait for user ID to be set from the frontend
         self.__user_id_set.wait()
+        asyncio.create_task(self.__wait_for_close())
         print(f"User logged in: {self.user_id}")
+
+        if self.__close_initialized or self.__application_close_event.is_set():
+            return
 
         self.websocket = await websockets.connect(SERVER_URL)
 
@@ -1218,8 +1238,12 @@ class App:
 
     async def close(self):
         """Function closing application"""
+        if self.__close_initialized:
+            return
         print("Closing application")
-        await self.websocket.close()
+        if self.websocket is not None:
+            await self.websocket.close()
+            self.websocket = None
 
         for chat in self.__chats.values():
             asyncio.create_task(chat.close())
