@@ -22,3 +22,6 @@
 # Mac OS system files
 .DS_Store
 **/.DS_Store
+
+# Files to download application
+**/downloads/
