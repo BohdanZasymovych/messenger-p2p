@@ -5,7 +5,6 @@
 **/.venv_server
 **/.venv_client
 
-
 # Logs
 **/*.log
 **/logs/
@@ -25,3 +24,6 @@
 
 # Files to download application
 **/downloads/
+
+# Test files
+**/test_*

@@ -10,6 +10,19 @@ const lastMessageDates = {};
 const userIdFromStorage = sessionStorage.getItem("user_id");
 const passwordFromStorage = sessionStorage.getItem("password");
 
+function createConsistentTimestamp() {
+  return new Date().toISOString();
+}
+
+function parseTimestamp(timestamp) {
+  try {
+    return new Date(timestamp);
+  } catch (e) {
+    console.error("Failed to parse timestamp:", timestamp);
+    return new Date(); // Fallback to current time
+  }
+}
+
 window.onload = () => {
   if (!userIdFromStorage || !passwordFromStorage) {
     alert("Missing user session. Please log in again.");
@@ -202,7 +215,7 @@ async function openChat(targetUserId) {
 
   let currentDate = null;
   messages.forEach(msg => {
-    const msgDate = new Date(msg.timestamp);
+    const msgDate = parseTimestamp(msg.timestamp);
     const dateStr = formatDate(msgDate);
 
     if (dateStr !== currentDate) {
@@ -243,7 +256,7 @@ async function sendMessage() {
   const text = input.value.trim();
   if (!text || !currentTargetUserId) return;
 
-  const timestamp = new Date().toISOString();
+  const timestamp = createConsistentTimestamp();
 
   const res = await fetch("/api/send_message", {
     method: "POST",
@@ -302,49 +315,60 @@ async function fetchNewMessages(targetUserId) {
     ? `/api/get_new_messages/${userId}/${targetUserId}/${encodeURIComponent(lastTimestamp)}`
     : `/api/get_messages/${userId}/${targetUserId}`;
 
-  const res = await fetch(url);
-  if (!res.ok) return;
-  const messages = await res.json();
-  if (messages.length === 0) return;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.error(`Failed to fetch messages: ${res.status}`);
+      return;
+    }
+    
+    const messages = await res.json();
+    if (!messages || messages.length === 0) return;
+    
+    // Safely get the last message timestamp with validation
+    if (messages.length > 0 && messages[messages.length - 1].timestamp) {
+      lastMessageTimestamps[targetUserId] = messages[messages.length - 1].timestamp;
+    }
+    
+    if (targetUserId === currentTargetUserId) {
+      for (const msg of messages) {
+        const msgDate = parseTimestamp(msg.timestamp);
+        const dateStr = formatDate(msgDate);
 
-  lastMessageTimestamps[targetUserId] = messages[messages.length - 1].timestamp;
+        if (dateStr !== lastMessageDates[targetUserId]) {
+          const dateDiv = document.createElement("div");
+          dateDiv.classList.add("date-divider");
+          dateDiv.textContent = dateStr;
+          document.getElementById("messages").appendChild(dateDiv);
+          lastMessageDates[targetUserId] = dateStr;
+        }
 
-  if (targetUserId === currentTargetUserId) {
-    for (const msg of messages) {
-      const msgDate = new Date(msg.timestamp);
-      const dateStr = formatDate(msgDate);
+        const bubble = document.createElement("div");
+        bubble.classList.add("message", msg.sender === userId ? "sent" : "received");
+        bubble.textContent = msg.text;
 
-      if (dateStr !== lastMessageDates[targetUserId]) {
-        const dateDiv = document.createElement("div");
-        dateDiv.classList.add("date-divider");
-        dateDiv.textContent = dateStr;
-        document.getElementById("messages").appendChild(dateDiv);
-        lastMessageDates[targetUserId] = dateStr;
+        const timeEl = document.createElement("div");
+        timeEl.classList.add("message-time");
+        timeEl.textContent = msgDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        bubble.appendChild(timeEl);
+
+        document.getElementById("messages").appendChild(bubble);
       }
 
-      const bubble = document.createElement("div");
-      bubble.classList.add("message", msg.sender === userId ? "sent" : "received");
-      bubble.textContent = msg.text;
-
-      const timeEl = document.createElement("div");
-      timeEl.classList.add("message-time");
-      timeEl.textContent = msgDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      bubble.appendChild(timeEl);
-
-      document.getElementById("messages").appendChild(bubble);
-    }
-
-    document.getElementById("messages").scrollTop = document.getElementById("messages").scrollHeight;
-  } else {
-    // only mark if it's not the currently open chat
-    if (initialLoadComplete && targetUserId !== currentTargetUserId) {
-      const li = document.querySelector(`#chatList li[data-user-id="${targetUserId}"]`);
-      if (li && !li.querySelector(".unread-dot")) {
-        const dot = document.createElement("span");
-        dot.classList.add("unread-dot");
-        li.appendChild(dot);
+      document.getElementById("messages").scrollTop = document.getElementById("messages").scrollHeight;
+    } else {
+      // only mark if it's not the currently open chat
+      if (initialLoadComplete && messages.length > 0) {
+        const li = document.querySelector(`#chatList li[data-user-id="${targetUserId}"]`);
+        if (li && !li.querySelector(".unread-dot")) {
+          const dot = document.createElement("span");
+          dot.classList.add("unread-dot");
+          li.appendChild(dot);
+        }
       }
     }
+  } catch (error) {
+    console.error(`Error fetching new messages for ${targetUserId}:`, error);
   }
 }
 
