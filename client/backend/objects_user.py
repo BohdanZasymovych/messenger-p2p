@@ -41,20 +41,11 @@ def setup_logging():
     # Set up logging
     TIMESTAMP = datetime.now().strftime('%Y-%m-%d_%H-%M-%S-%f')[:-3]
     LOG_FILENAME = f"./logs/log_{TIMESTAMP}.log"
-    
-    # Create a console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.DEBUG)
-    
-    # Configure both file and console logging
     logging.basicConfig(
+        filename=LOG_FILENAME,
         level=logging.DEBUG,
         format='%(asctime)s.%(msecs)03d [%(levelname)s] %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S',
-        handlers=[
-            logging.FileHandler(LOG_FILENAME),
-            console_handler
-        ]
+        datefmt='%Y-%m-%d %H:%M:%S'
     )
 setup_logging()
 
@@ -1195,11 +1186,14 @@ class App:
         config = Config()
         config.bind = ["0.0.0.0:8000"]
 
+        config.certfile = "/app/certs/cert.pem"
+        config.keyfile = "/app/certs/key.pem"
+
         self.__server_task = asyncio.create_task(serve(self.api, config))
 
-        await asyncio.sleep(1)
+        await asyncio.sleep(0.5)
 
-        print("API server started on http://localhost:8000")
+        print("API server started on https://localhost")
 
     async def stop_server(self):
         """Stop the Hypercorn server gracefully"""

@@ -1,3 +1,4 @@
+"""Time utilities for making consistent timestamps in the database."""
 from datetime import datetime, timezone
 
 
@@ -9,14 +10,12 @@ def create_timestamp() -> str:
 def format_db_timestamp(timestamp) -> str:
     """Format database timestamp consistently"""
     if hasattr(timestamp, 'astimezone'):
-        # Convert to UTC and format as ISO string
         return timestamp.astimezone(timezone.utc).isoformat()
-    elif isinstance(timestamp, str):
-        # Already a string, but try to parse and normalize if needed
+    if isinstance(timestamp, str):
         try:
             dt = datetime.fromisoformat(timestamp)
             return dt.astimezone(timezone.utc).isoformat()
         except ValueError:
-            return timestamp  # Return as-is if can't parse
+            return timestamp
     else:
-        return str(timestamp)  # Fallback
+        return str(timestamp)
