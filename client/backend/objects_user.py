@@ -25,7 +25,7 @@ from pydantic import BaseModel
 from hypercorn.config import Config
 from hypercorn.asyncio import serve
 
-from messages_requests import Request, Message, Encryption, SymetricEncryption
+from messages_requests import Request, Message, Encryption, SymmetricEncryption
 from time_utils import create_timestamp, format_db_timestamp
 
 WebSocket = Union[WebSocketClientProtocol, WebSocketServerProtocol]
@@ -41,11 +41,20 @@ def setup_logging():
     # Set up logging
     TIMESTAMP = datetime.now().strftime('%Y-%m-%d_%H-%M-%S-%f')[:-3]
     LOG_FILENAME = f"./logs/log_{TIMESTAMP}.log"
+    
+    # Create a console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.DEBUG)
+    
+    # Configure both file and console logging
     logging.basicConfig(
-        filename=LOG_FILENAME,
         level=logging.DEBUG,
         format='%(asctime)s.%(msecs)03d [%(levelname)s] %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
+        datefmt='%Y-%m-%d %H:%M:%S',
+        handlers=[
+            logging.FileHandler(LOG_FILENAME),
+            console_handler
+        ]
     )
 setup_logging()
 
@@ -742,11 +751,10 @@ class App:
         self.user_id = None
         self.websocket = None
         self.__chats_loaded = False
-        self.__password = "123456789"
         self.__futures = {}
         self.__public_key = None
         self.__private_key = None
-        self.__symetric_encryption = SymetricEncryption(self.__password)
+        self.__symmetric_encryption = SymmetricEncryption()
 
         self.__requests_queue = asyncio.Queue()
         # Create a separate router for API endpoints FIRST
@@ -802,6 +810,9 @@ class App:
                     raise HTTPException(status_code=400, detail="Missing user_id or password")
 
                 self.user_id = user_id
+                print(f"Setting password: {password}")
+                self.__symmetric_encryption.set_password(password)
+                print("Password was set")
                 self.__user_id_set.set()
                 return {"status": "success", "user_id": user_id}
             except Exception as e:
@@ -924,7 +935,7 @@ class App:
             target_user_id = [target_user_id]
         try:
             for user_id in target_user_id:
-                user_id = self.__symetric_encryption.encrypt(user_id)
+                user_id = self.__symmetric_encryption.encrypt(user_id)
                 await conn.execute("""--sql
                     INSERT INTO chats (target_user_id)
                     VALUES ($1)
@@ -940,7 +951,7 @@ class App:
             target_user_id = message.target_user_id
 
             message_json = message.json_string
-            message_json_encrypted = self.__symetric_encryption.encrypt(message_json)
+            message_json_encrypted = self.__symmetric_encryption.encrypt(message_json)
 
             print(f"Saving message to database: {user_id} -> {target_user_id}")
 
@@ -974,9 +985,9 @@ class App:
 
                 messages = []
                 for row in rows:
-                    is_from_me = row["user_id"] == user_id
+                    is_from_me = row["is_outgoing"]
 
-                    message_decrypted = self.__symetric_encryption.decrypt(row["message"])
+                    message_decrypted = self.__symmetric_encryption.decrypt(row["message"])
                     message_obj = Message.from_string(message_decrypted)
                     message_content = message_obj.content
 
@@ -996,7 +1007,7 @@ class App:
     async def get_new_messages_after(self, user_id: str, target_user_id: str, timestamp):
         """Get messages between users that are newer than specified timestamp"""
         normalized_timestamp = format_db_timestamp(timestamp)
-        
+
         try:
             conn = await asyncpg.connect(self.DATABASE_URL)
 
@@ -1006,19 +1017,18 @@ class App:
                     WHERE ((user_id = $1 AND target_user_id = $2)
                     OR (user_id = $2 AND target_user_id = $1))
                     AND timestamp > $3::text::timestamp
+                    AND is_outgoing = FALSE
                     ORDER BY timestamp ASC;
                 """, user_id, target_user_id, normalized_timestamp)
 
                 messages = []
                 for row in rows:
-                    is_from_me = row['user_id'] == user_id
-
-                    message_decrypted = self.__symetric_encryption.decrypt(row["message"])
+                    message_decrypted = self.__symmetric_encryption.decrypt(row["message"])
                     message_obj = Message.from_string(message_decrypted)
                     message_content = message_obj.content
 
                     messages.append({
-                        "sender": "me" if is_from_me else "peer",
+                        "sender": "peer",
                         "text": message_content,
                         "timestamp": row['timestamp'].isoformat(),
                         "id": str(row['id'])
@@ -1061,7 +1071,7 @@ class App:
         del self.__chats[target_user_id]
 
         # remove chat from the database
-        target_user_id = self.__symetric_encryption.encrypt(target_user_id)
+        target_user_id = self.__symmetric_encryption.encrypt(target_user_id)
         conn = await asyncpg.connect(self.DATABASE_URL)
         try:
             await conn.execute("""--sql
@@ -1083,7 +1093,7 @@ class App:
             await conn.close()
 
         print(f"Chats from database: {chats}")
-        chats = [self.__symetric_encryption.decrypt(chat["target_user_id"]) for chat in chats]
+        chats = [self.__symmetric_encryption.decrypt(chat["target_user_id"]) for chat in chats]
         return chats
 
     def send_message(self, target_user_id: str, message: str):
@@ -1193,7 +1203,7 @@ class App:
 
     async def stop_server(self):
         """Stop the Hypercorn server gracefully"""
-        if hasattr(self, '_App__server_task') and self.__server_task is not None:
+        if self.__server_task is not None:
             self.__server_task.cancel()
 
             try:
@@ -1243,7 +1253,7 @@ class App:
         asyncio.create_task(self.__receive_server_requests())
         asyncio.create_task(self.__handle_server_requests())
 
-        self.__private_key, self.__public_key = Encryption.load_long_term_keys(self.__password)
+        self.__private_key, self.__public_key = Encryption.load_long_term_keys(self.__symmetric_encryption)
         login_request = Request(
             request_type="login_request",
             user_id=self.user_id,
@@ -1299,4 +1309,7 @@ class App:
 
         if self.__chats:
             await asyncio.gather(*[chat.is_closed.wait() for chat in self.__chats.values()])
+
+        await self.stop_server()
+
         print("Application closed")

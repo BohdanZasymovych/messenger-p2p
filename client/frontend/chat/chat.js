@@ -23,24 +23,40 @@ function parseTimestamp(timestamp) {
   }
 }
 
-window.onload = () => {
+window.onload = async () => {
   if (!userIdFromStorage || !passwordFromStorage) {
     alert("Missing user session. Please log in again.");
     window.location.href = "../auth/login.html";
     return;
   }
-  login(userIdFromStorage, passwordFromStorage);
+  await login(userIdFromStorage, passwordFromStorage);
   initialLoadComplete = true;
 };
 
-function login(id, password) {
+function hashPassword(password) {
+  return new Promise(resolve => {
+    // Import the js-sha256 library if not already present
+    if (typeof sha256 === 'undefined') {
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/js-sha256/0.9.0/sha256.min.js';
+      script.onload = () => {
+        resolve(sha256(password));
+      };
+      document.head.appendChild(script);
+    } else {
+      resolve(sha256(password));
+    }
+  });
+}
+
+async function login(id, password) {
   const user_id = id;
-  const user_password = password;
+  const hashedPassword = await hashPassword(password);
 
   fetch("/api/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user_id, password: user_password })
+    body: JSON.stringify({ user_id, password: hashedPassword})
   })
     .then(res => {
       if (!res.ok) throw new Error("Login failed");
@@ -55,6 +71,9 @@ function login(id, password) {
       document.getElementById("chatWindow").style.display = "flex";
       document.getElementById("inputBar").style.display = "none";
       document.querySelector(".chat-header").style.display = "none";
+
+      const ph = document.getElementById("noChatPlaceholder");
+      if (ph) ph.style.display = "block";
 
       await waitForChatsLoaded();
       await loadChats();
@@ -124,6 +143,11 @@ async function loadChats() {
   const res = await fetch(`/api/get_chats/${userId}`);
   const chatIds = await res.json();
   chatIds.forEach(addChatToUI);
+
+  const ph = document.getElementById("noChatPlaceholder");
+  if (ph && chatIds.length === 0) {
+    ph.style.display = "block";
+  }
 }
 
 async function createChat() {
@@ -227,8 +251,7 @@ async function openChat(targetUserId) {
     }
 
     const bubble = document.createElement("div");
-    bubble.classList.add("message", msg.sender === userId ? "sent" : "received");
-    bubble.textContent = msg.text;
+    bubble.classList.add("message", msg.sender === "me" ? "sent" : "received");    bubble.textContent = msg.text;
 
     const timeEl = document.createElement("div");
     timeEl.classList.add("message-time");
@@ -344,7 +367,7 @@ async function fetchNewMessages(targetUserId) {
         }
 
         const bubble = document.createElement("div");
-        bubble.classList.add("message", msg.sender === userId ? "sent" : "received");
+        bubble.classList.add("message", msg.sender === "me" ? "sent" : "received");
         bubble.textContent = msg.text;
 
         const timeEl = document.createElement("div");

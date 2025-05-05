@@ -123,6 +123,49 @@ class Request:
         """Returns string representation of the request"""
         return self.json_string
 
+class SymmetricEncryption:
+    """
+    Class responsible for encrypting and decrypting
+    content the of database using key derived from password
+    """
+    SALT = b';\xa1\xa0\xcf[\x89\x05\xb6\x06\x8f\x89J\xc8\x8d\x85m'
+
+    def __init__(self):
+        self.__password = None
+        self.__key = None
+
+    def set_password(self, password: str):
+        """Sets the password and derives the key from it"""
+        self.__password = password
+        self.__key = self.__derive_key_from_password()
+
+    def __derive_key_from_password(self) -> bytes:
+        """Derives encryption key from password using Argon2id"""
+        key = nacl.pwhash.argon2id.kdf(
+            size=nacl.secret.SecretBox.KEY_SIZE,
+            password=self.__password.encode('utf-8'),
+            salt=self.SALT,
+            opslimit=nacl.pwhash.argon2id.OPSLIMIT_INTERACTIVE,
+            memlimit=nacl.pwhash.argon2id.MEMLIMIT_INTERACTIVE
+        )
+        return key
+
+    def encrypt(self, data: str) -> str:
+        """Encrypts data using XSalsa20-Poly1305"""
+        box = nacl.secret.SecretBox(self.__key)
+        encrypted = box.encrypt(data.encode('utf-8'))
+        return base64.b64encode(encrypted).decode('utf-8')
+
+    def decrypt(self, encrypted_data: str) -> str:
+        """Decrypts data using XSalsa20-Poly1305"""
+        try:
+            box = nacl.secret.SecretBox(self.__key)
+            encrypted = base64.b64decode(encrypted_data)
+            decrypted = box.decrypt(encrypted)
+            return decrypted.decode('utf-8')
+        except (nacl.exceptions.CryptoError, ValueError) as e:
+            raise ValueError(f"Decryption failed: {e}") from e
+
 
 class Encryption:
     """Class responsible for encryption of messages"""
@@ -147,16 +190,15 @@ class Encryption:
         self.__public_key = self.__private_key.public_key
 
     @classmethod
-    def __generate_long_term_keys(cls, password: str) -> tuple[str, str]:
+    def __generate_long_term_keys(cls, symmetric_encryption: SymmetricEncryption) -> tuple[str, str]:
         """Generates the long term keys and saves them to files"""
         private_key = PrivateKey.generate()
         public_key = private_key.public_key
         private_key_bytes = bytes(private_key)
         public_key_bytes = bytes(public_key)
 
-        symetric_encryption = SymetricEncryption(password)
-        encrypted_private_key = symetric_encryption.encrypt(base64.b64encode(private_key_bytes).decode('utf-8'))
-        encrypted_public_key = symetric_encryption.encrypt(base64.b64encode(public_key_bytes).decode('utf-8'))
+        encrypted_private_key = symmetric_encryption.encrypt(base64.b64encode(private_key_bytes).decode('utf-8'))
+        encrypted_public_key = symmetric_encryption.encrypt(base64.b64encode(public_key_bytes).decode('utf-8'))
 
         os.makedirs("keys", exist_ok=True)
 
@@ -173,7 +215,7 @@ class Encryption:
         return private_key_str, public_key_str
 
     @classmethod
-    def load_long_term_keys(cls, password) -> tuple[str, str]:
+    def load_long_term_keys(cls, symmetric_encryption: SymmetricEncryption) -> tuple[str, str]:
         """Loads or generates keys and returns them as base64 strings"""
 
         try:
@@ -183,14 +225,12 @@ class Encryption:
             with open(cls.PUBLIC_KEY_PATH, "r", encoding="utf-8") as f:
                 encrypted_public_key = f.read()
 
-            symetric_encryption = SymetricEncryption(password)
-
             # Decrypt the keys
-            private_key_str = symetric_encryption.decrypt(encrypted_private_key)
-            public_key_str = symetric_encryption.decrypt(encrypted_public_key)
+            private_key_str = symmetric_encryption.decrypt(encrypted_private_key)
+            public_key_str = symmetric_encryption.decrypt(encrypted_public_key)
 
         except FileNotFoundError:
-            private_key_str, public_key_str = cls.__generate_long_term_keys(password)
+            private_key_str, public_key_str = cls.__generate_long_term_keys(symmetric_encryption)
 
         return private_key_str, public_key_str
 
@@ -221,42 +261,3 @@ class Encryption:
             raise ValueError("Peer public key not set")
         encrypted_bytes = base64.b64decode(encrypted_message)
         return self.box.decrypt(encrypted_bytes).decode("utf-8")
-
-
-class SymetricEncryption:
-    """
-    Class responsible for encrypting and decrypting
-    content the of database using key derived from password
-    """
-    SALT = b'\x00' * 16
-
-    def __init__(self, password: str):
-        self.__password = password
-        self.__key = self.__derive_key_from_password()
-
-    def __derive_key_from_password(self) -> bytes:
-        """Derives encryption key from password using Argon2id"""
-        key = nacl.pwhash.argon2id.kdf(
-            size=nacl.secret.SecretBox.KEY_SIZE,
-            password=self.__password.encode('utf-8'),
-            salt=self.SALT,
-            opslimit=nacl.pwhash.argon2id.OPSLIMIT_INTERACTIVE,
-            memlimit=nacl.pwhash.argon2id.MEMLIMIT_INTERACTIVE
-        )
-        return key
-
-    def encrypt(self, data: str) -> str:
-        """Encrypts data using XSalsa20-Poly1305"""
-        box = nacl.secret.SecretBox(self.__key)
-        encrypted = box.encrypt(data.encode('utf-8'))
-        return base64.b64encode(encrypted).decode('utf-8')
-
-    def decrypt(self, encrypted_data: str) -> str:
-        """Decrypts data using XSalsa20-Poly1305"""
-        try:
-            box = nacl.secret.SecretBox(self.__key)
-            encrypted = base64.b64decode(encrypted_data)
-            decrypted = box.decrypt(encrypted)
-            return decrypted.decode('utf-8')
-        except (nacl.exceptions.CryptoError, ValueError) as e:
-            raise ValueError(f"Decryption failed: {e}") from e

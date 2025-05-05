@@ -5,7 +5,7 @@ python messenger.py &
 
 # Wait for server to start
 echo "Waiting for server to start..."
-sleep 5
+sleep 2
 
 # Print instructions for accessing the web interface
 echo ""
