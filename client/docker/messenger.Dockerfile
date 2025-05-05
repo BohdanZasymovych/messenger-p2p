@@ -18,7 +18,7 @@ COPY backend/ /app/
 RUN mkdir -p /app/backend/frontend
 COPY frontend/ /app/backend/frontend
 
-COPY certs/ /app/certs
+# COPY certs/ /app/certs
 
 # Copy the start script and make it executable
 COPY docker/start.sh /app/
