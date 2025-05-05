@@ -6,6 +6,7 @@ let messagePollingInterval;
 let chatPollingInterval;
 const lastMessageTimestamps = {};
 const lastMessageDates = {};
+const lastReadTimestamps = {};
 
 const userIdFromStorage = sessionStorage.getItem("user_id");
 const passwordFromStorage = sessionStorage.getItem("password");
@@ -267,6 +268,8 @@ async function openChat(targetUserId) {
     if (dot) dot.remove();
   }
 
+  lastReadTimestamps[targetUserId] = Date.now();
+
   currentTargetUserId = targetUserId;
 
   const chatHeader = document.querySelector(".chat-header");
@@ -405,6 +408,7 @@ function startMessagePolling() {
 
 async function fetchNewMessages(targetUserId) {
   const lastTimestamp = lastMessageTimestamps[targetUserId];
+  
   const url = lastTimestamp
     ? `/api/get_new_messages/${userId}/${targetUserId}/${encodeURIComponent(lastTimestamp)}`
     : `/api/get_messages/${userId}/${targetUserId}`;
@@ -419,9 +423,9 @@ async function fetchNewMessages(targetUserId) {
     const messages = await res.json();
     if (!messages || messages.length === 0) return;
     
-    // Safely get the last message timestamp with validation
-    if (messages.length > 0 && messages[messages.length - 1].timestamp) {
-      lastMessageTimestamps[targetUserId] = messages[messages.length - 1].timestamp;
+    const lastMessageInBatch = messages[messages.length - 1];
+    if (lastMessageInBatch && lastMessageInBatch.timestamp) {
+      lastMessageTimestamps[targetUserId] = lastMessageInBatch.timestamp;
     }
     
     if (targetUserId === currentTargetUserId) {
@@ -431,7 +435,6 @@ async function fetchNewMessages(targetUserId) {
         const msgDate = parseTimestamp(msg.timestamp);
         const dateStr = formatDate(msgDate);
 
-        // Перевіряємо, чи потрібно додавати роздільник
         if (dateStr !== lastMessageDates[targetUserId]) {
           const shouldAdd = shouldAddDateDivider(messagesContainer.querySelectorAll(".message"), dateStr);
           if (shouldAdd) {
@@ -439,7 +442,6 @@ async function fetchNewMessages(targetUserId) {
           }
           lastMessageDates[targetUserId] = dateStr;
           
-          // Оновлюємо дату в локальному сховищі
           localStorage.setItem(`lastDate_${userId}_${targetUserId}`, dateStr);
         }
 
@@ -456,9 +458,10 @@ async function fetchNewMessages(targetUserId) {
       }
 
       messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      
+      lastReadTimestamps[targetUserId] = Date.now();
     } else {
-      // only mark if it's not the currently open chat
-      if (initialLoadComplete && messages.length > 0) {
+      if (initialLoadComplete && lastTimestamp) {
         const li = document.querySelector(`#chatList li[data-user-id="${targetUserId}"]`);
         if (li && !li.querySelector(".unread-dot")) {
           const dot = document.createElement("span");

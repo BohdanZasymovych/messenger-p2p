@@ -801,9 +801,7 @@ class App:
                     raise HTTPException(status_code=400, detail="Missing user_id or password")
 
                 self.user_id = user_id
-                print(f"Setting password: {password}")
                 self.__symmetric_encryption.set_password(password)
-                print("Password was set")
                 self.__user_id_set.set()
                 return {"status": "success", "user_id": user_id}
             except Exception as e:
