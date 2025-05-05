@@ -10,6 +10,56 @@ const lastMessageDates = {};
 const userIdFromStorage = sessionStorage.getItem("user_id");
 const passwordFromStorage = sessionStorage.getItem("password");
 
+function addDateDivider(dateStr, container) {
+  const dateDiv = document.createElement("div");
+  dateDiv.classList.add("date-divider");
+  
+  const dateSpan = document.createElement("span");
+  dateSpan.textContent = dateStr;
+  dateDiv.appendChild(dateSpan);
+  
+  container.appendChild(dateDiv);
+  return dateDiv;
+}
+
+// Функція для визначення, чи потрібно додавати роздільник дати
+function shouldAddDateDivider(messages, dateStr) {
+  // Якщо немає повідомлень, то це перший роздільник
+  if (!messages || messages.length === 0) {
+    return true;
+  }
+
+  // Перевіряємо всі повідомлення знизу вгору
+  // щоб знайти останній роздільник дати
+  const messagesContainer = document.getElementById("messages");
+  const dividers = messagesContainer.querySelectorAll(".date-divider");
+  
+  if (dividers.length > 0) {
+    // Отримуємо текст останнього доданого роздільника
+    const lastDivider = dividers[dividers.length - 1];
+    const lastDividerText = lastDivider.querySelector("span").textContent;
+    
+    // Якщо роздільник з такою датою вже є, не додаємо новий
+    return lastDividerText !== dateStr;
+  }
+  
+  return true;
+}
+
+// Додайте цю функцію для ініціалізації lastMessageDates з локального сховища
+function initLastMessageDates() {
+  const keys = Object.keys(localStorage);
+  for (const key of keys) {
+    if (key.startsWith('lastDate_')) {
+      const parts = key.split('_');
+      if (parts.length >= 3) {
+        const targetUserId = parts[2];
+        lastMessageDates[targetUserId] = localStorage.getItem(key);
+      }
+    }
+  }
+}
+
 function createConsistentTimestamp() {
   return new Date().toISOString();
 }
@@ -92,6 +142,8 @@ document.addEventListener('DOMContentLoaded', () => {
   if (closeButton) {
     closeButton.addEventListener('click', closeApplication);
   }
+  
+  initLastMessageDates();
 });
 
 // Function to handle application closing
@@ -237,31 +289,45 @@ async function openChat(targetUserId) {
     ? messages[messages.length - 1].timestamp
     : null;
 
+  const messagesContainer = document.getElementById("messages");
   let currentDate = null;
+  let firstDayDividerAdded = false;
+
   messages.forEach(msg => {
     const msgDate = parseTimestamp(msg.timestamp);
     const dateStr = formatDate(msgDate);
 
+    // Додаємо роздільник дат, якщо змінилася дата
     if (dateStr !== currentDate) {
-      const dateDiv = document.createElement("div");
-      dateDiv.classList.add("date-divider");
-      dateDiv.textContent = dateStr;
-      document.getElementById("messages").appendChild(dateDiv);
+      // Перевіряємо, чи треба додавати роздільник
+      const shouldAdd = shouldAddDateDivider(messagesContainer.querySelectorAll(".message"), dateStr);
+      if (shouldAdd) {
+        addDateDivider(dateStr, messagesContainer);
+      }
       currentDate = dateStr;
+      lastMessageDates[targetUserId] = dateStr;
+      
+      // Запам'ятовуємо, що ми вже додали роздільник для першого дня
+      if (!firstDayDividerAdded) {
+        firstDayDividerAdded = true;
+        // Зберігаємо в локальному сховищі дату останнього повідомлення
+        localStorage.setItem(`lastDate_${userId}_${targetUserId}`, dateStr);
+      }
     }
 
     const bubble = document.createElement("div");
-    bubble.classList.add("message", msg.sender === "me" ? "sent" : "received");    bubble.textContent = msg.text;
+    bubble.classList.add("message", msg.sender === "me" ? "sent" : "received");
+    bubble.textContent = msg.text;
 
     const timeEl = document.createElement("div");
     timeEl.classList.add("message-time");
     timeEl.textContent = msgDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     bubble.appendChild(timeEl);
 
-    document.getElementById("messages").appendChild(bubble);
+    messagesContainer.appendChild(bubble);
   });
 
-  document.getElementById("messages").scrollTop = document.getElementById("messages").scrollHeight;
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
 function formatDate(date) {
@@ -295,15 +361,20 @@ async function sendMessage() {
   if (res.ok) {
     input.value = "";
 
-    const msgDate = new Date(timestamp);
+    const msgDate = parseTimestamp(timestamp);
     const dateStr = formatDate(msgDate);
+    const messagesContainer = document.getElementById("messages");
 
+    // Перевіряємо, чи потрібно додавати роздільник
     if (dateStr !== lastMessageDates[currentTargetUserId]) {
-      const dateDiv = document.createElement("div");
-      dateDiv.classList.add("date-divider");
-      dateDiv.textContent = dateStr;
-      document.getElementById("messages").appendChild(dateDiv);
+      const shouldAdd = shouldAddDateDivider(messagesContainer.querySelectorAll(".message"), dateStr);
+      if (shouldAdd) {
+        addDateDivider(dateStr, messagesContainer);
+      }
       lastMessageDates[currentTargetUserId] = dateStr;
+      
+      // Оновлюємо дату в локальному сховищі
+      localStorage.setItem(`lastDate_${userId}_${currentTargetUserId}`, dateStr);
     }
 
     const bubble = document.createElement("div");
@@ -315,8 +386,8 @@ async function sendMessage() {
     timeEl.textContent = msgDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     bubble.appendChild(timeEl);
 
-    document.getElementById("messages").appendChild(bubble);
-    document.getElementById("messages").scrollTop = document.getElementById("messages").scrollHeight;
+    messagesContainer.appendChild(bubble);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
 
     lastMessageTimestamps[currentTargetUserId] = timestamp;
   } else {
@@ -354,16 +425,22 @@ async function fetchNewMessages(targetUserId) {
     }
     
     if (targetUserId === currentTargetUserId) {
+      const messagesContainer = document.getElementById("messages");
+      
       for (const msg of messages) {
         const msgDate = parseTimestamp(msg.timestamp);
         const dateStr = formatDate(msgDate);
 
+        // Перевіряємо, чи потрібно додавати роздільник
         if (dateStr !== lastMessageDates[targetUserId]) {
-          const dateDiv = document.createElement("div");
-          dateDiv.classList.add("date-divider");
-          dateDiv.textContent = dateStr;
-          document.getElementById("messages").appendChild(dateDiv);
+          const shouldAdd = shouldAddDateDivider(messagesContainer.querySelectorAll(".message"), dateStr);
+          if (shouldAdd) {
+            addDateDivider(dateStr, messagesContainer);
+          }
           lastMessageDates[targetUserId] = dateStr;
+          
+          // Оновлюємо дату в локальному сховищі
+          localStorage.setItem(`lastDate_${userId}_${targetUserId}`, dateStr);
         }
 
         const bubble = document.createElement("div");
@@ -375,10 +452,10 @@ async function fetchNewMessages(targetUserId) {
         timeEl.textContent = msgDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         bubble.appendChild(timeEl);
 
-        document.getElementById("messages").appendChild(bubble);
+        messagesContainer.appendChild(bubble);
       }
 
-      document.getElementById("messages").scrollTop = document.getElementById("messages").scrollHeight;
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
     } else {
       // only mark if it's not the currently open chat
       if (initialLoadComplete && messages.length > 0) {

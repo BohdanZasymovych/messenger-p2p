@@ -324,3 +324,22 @@ body {
   80%  { opacity: 1; }
   100% { opacity: 0; }
 }
+
+/* Візуально привабливіші роздільники дат */
+.date-divider {
+  text-align: center;
+  margin: 20px 0;
+  user-select: none;
+  position: relative;
+}
+
+.date-divider span {
+  font-size: 13px;
+  font-weight: 500;
+  color: #ffffff;
+  background: linear-gradient(90deg, #4576c5, #6a98db);
+  border-radius: 16px;
+  padding: 5px 15px;
+  display: inline-block;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
