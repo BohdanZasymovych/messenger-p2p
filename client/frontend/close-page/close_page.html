@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Application Closed - Security App</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(to bottom, black, #242D6F);
+      color: white;
+      text-align: center;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+    .closed-container {
+      font-size: 18px;
+      font-style: italic;
+      width: 100%;
+      max-width: 400px;
+      padding: 20px;
+    }
+    .app-status {
+      font-size: 24px;
+      margin-bottom: 20px;
+    }
+    .status-message {
+      margin-bottom: 30px;
+      line-height: 1.5;
+      opacity: 0.9;
+    }
+    .instructions {
+      font-size: 16px;
+      width: 100%;
+      max-width: 400px;
+      padding: 10px 20px;
+      line-height: 1.5;
+      color: #e0e0e0;
+    }
+  </style>
+</head>
+<body>
+  <div class="closed-container">
+    <div class="app-status">Application Closed</div>
+    <p class="status-message">
+      Your secure session has been terminated.<br>
+      Thank you for using our security application.
+    </p>
+  </div>
+  <div class="instructions">
+    <p>
+      You may now safely close this browser tab and terminate the application in the terminal.<br>
+      To restart the application, stop the current process and run it again.
+    </p>
+  </div>
+</body>
+</html>

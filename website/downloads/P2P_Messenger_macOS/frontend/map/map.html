@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Interactive Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+  <link rel="stylesheet" href="map.css" />
+</head>
+<body>
+
+<div id="map"></div>
+<button onclick="goHome()" class="home-button">🏠 Home</button>
+<div class="search-container">
+  <input type="text" id="search-input" placeholder="Find a place..." />
+  <button onclick="searchPlace()">Search</button>
+</div>
+
+<div class="map-buttons">
+  <button onclick="setRoute()" title="Set route">➡️</button>
+  <button onclick="clearAll()" title="Clear all">🧹</button>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.min.js"></script>
+<script src="map.js"></script>
+</body>
+</html>

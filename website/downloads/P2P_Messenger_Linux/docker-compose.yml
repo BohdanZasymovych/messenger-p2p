@@ -1,0 +1,50 @@
+services:
+  user_database:
+    image: postgres:14
+    container_name: messenger_user_db
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER_CLIENT}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD_CLIENT}"
+      POSTGRES_DB: "${POSTGRES_DB_CLIENT}"
+      DATABASE_URL_CLIENT: "${DATABASE_URL_CLIENT}"
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data_user:/var/lib/postgresql/data
+      - ./docker/db_init_user.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - messenger_network
+
+  messenger:
+    build:
+      context: .
+      dockerfile: docker/messenger.Dockerfile
+    container_name: messenger_app
+    environment:
+      DATABASE_URL_CLIENT: "${DATABASE_URL_CLIENT}"
+    sysctls:
+      net.ipv4.ip_local_port_range: "40000 40100"
+    ports:
+      - "8000:8000"
+      - "19302:19302/udp"
+      - "40000-40100:40000-40100/udp"
+    # network_mode: "host"
+    depends_on:
+      - user_database
+    volumes:
+      - ./backend:/app/backend
+      - encryption_keys:/app/keys
+      - message_data:/app/data 
+    working_dir: /app
+    # command: sh -c "chmod +x start.sh && ./start.sh"
+    networks:
+      - messenger_network
+
+volumes:
+  postgres_data_user:
+  encryption_keys:
+  message_data:
+
+networks:
+  messenger_network:
+    external: true

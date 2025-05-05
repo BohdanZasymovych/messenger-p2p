@@ -1,63 +1,87 @@
-const socket = new WebSocket("ws://localhost:8000");
+// 🛡️ Хешування пароля через jsSHA
+function hashPasswordSHA256(password) {
+  const shaObj = new jsSHA("SHA-256", "TEXT", { encoding: "UTF8" });
+  shaObj.update(password);
+  return shaObj.getHash("HEX");
+}
 
-socket.onopen = () => {
-    console.log("✅ WebSocket connected");
-};
+document.querySelector(".login-form").addEventListener("submit", function (event) {
+  event.preventDefault();
 
-// Отримуємо повідомлення від сервера
-socket.onmessage = (event) => {
-    console.log("📥 Response received:", event.data);
-    const response = JSON.parse(event.data);
+  const nickname = document.querySelector("input[name='nickname']").value.trim();
+  const email = document.querySelector("input[name='email']").value.trim();
+  const password = document.querySelector("input[name='password']").value;
 
-    if (response.type === "add_user_to_data_base_response") {
-        if (response.content.status === "success") {
-            console.log("✅ User added. Redirecting...");
+  if (!nickname || !email || !password) {
+    alert("Please fill in all fields.");
+    return;
+  }
 
-            // ⏳ Даемо серверу трохи часу перед закриттям з'єднання
-            setTimeout(() => {
-                socket.close();
-                window.location.href = "chat.html";
-            }, 300);
-        } else {
-            alert("❌ Registration failed: " + response.content.message);
-            socket.close();
-        }
-    }
-};
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
 
-socket.onerror = (error) => {
+  if (!emailRegex.test(email)) {
+    alert("❌ Please enter a valid email address.");
+    return;
+  }
+
+  if (!passwordRegex.test(password)) {
+    alert("❌ Password must contain at least 8 characters, including uppercase, lowercase, number, and special symbol.");
+    return;
+  }
+
+  // 🔐 Хешуємо пароль
+  const hashedPassword = hashPasswordSHA256(password);
+
+  const socket = new WebSocket("wss://messenger-server.fly.dev");
+
+  socket.onerror = (error) => {
     console.error("❌ WebSocket error:", error);
-};
+    alert("Failed to connect to server.");
+  };
 
-socket.onclose = () => {
-    console.warn("🔌 WebSocket connection closed");
-};
-
-// Обробка форми реєстрації
-document.querySelector(".login-form").addEventListener("submit", async (e) => {
-    e.preventDefault();
-
-    const nickname = document.querySelector("input[name='nickname']").value;
-    const email = document.querySelector("input[name='email']").value;
-    const password = document.querySelector("input[name='password']").value;
-
-    const request = {
-        type: "add_user_to_data_base",
+  socket.onopen = () => {
+    const registerRequest = {
+      type: "add_user_to_data_base",
+      user_id: nickname,
+      content: {
         user_id: nickname,
-        content: {
-            username: nickname,
-            email: email,
-            password: password
-        }
+        email: email,
+        password: hashedPassword
+      }
     };
 
-    if (socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify(request));
-        console.log("📤 Sent request:", request);
-    } else {
-        socket.addEventListener("open", () => {
-            socket.send(JSON.stringify(request));
-            console.log("📤 Sent request after open:", request);
-        });
+    socket.send(JSON.stringify(registerRequest));
+    console.log("📤 Sent registration request:", registerRequest);
+  };
+
+  socket.onmessage = (event) => {
+    let response;
+    try {
+      response = JSON.parse(event.data);
+    } catch (e) {
+      alert("Server returned invalid response.");
+      socket.close();
+      return;
     }
+
+    if (response.type === "add_user_to_data_base_response") {
+      if (response.content.status === "success") {
+        sessionStorage.setItem("user_id", nickname);
+        sessionStorage.setItem("password", password); // зберігаємо plain для подальшого використання
+
+        setTimeout(() => {
+          socket.close();
+          window.location.href = "../chat/chat.html";
+        }, 300);
+      } else {
+        alert("❌ Registration failed: " + response.content.message);
+        socket.close();
+      }
+    }
+  };
+
+  socket.onclose = () => {
+    console.warn("🔌 WebSocket connection closed");
+  };
 });

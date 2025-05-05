@@ -1,9 +1,9 @@
 """objects related to the user"""
 import os
+import ssl
 import logging
 from datetime import datetime
 import asyncio
-import threading
 from typing import Union
 from aiortc import (RTCPeerConnection,
                     RTCSessionDescription,
@@ -12,21 +12,23 @@ from aiortc import (RTCPeerConnection,
                     RTCIceServer)
 
 import websockets
-import asyncpg
 from websockets.legacy.client import WebSocketClientProtocol
 from websockets.legacy.server import WebSocketServerProtocol
+import asyncpg
 
 from fastapi import FastAPI, HTTPException, APIRouter, Request as FastAPIRequest
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-import uvicorn
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 
-from messages_requests import Request, Message, Encryption, SymetricEncryption
+from hypercorn.config import Config
+from hypercorn.asyncio import serve
+
+from messages_requests import Request, Message, Encryption, SymmetricEncryption
+from time_utils import create_timestamp, format_db_timestamp
 
 WebSocket = Union[WebSocketClientProtocol, WebSocketServerProtocol]
-
 
 
 def setup_logging():
@@ -39,11 +41,20 @@ def setup_logging():
     # Set up logging
     TIMESTAMP = datetime.now().strftime('%Y-%m-%d_%H-%M-%S-%f')[:-3]
     LOG_FILENAME = f"./logs/log_{TIMESTAMP}.log"
+    
+    # Create a console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.DEBUG)
+    
+    # Configure both file and console logging
     logging.basicConfig(
-        filename=LOG_FILENAME,
         level=logging.DEBUG,
         format='%(asctime)s.%(msecs)03d [%(levelname)s] %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
+        datefmt='%Y-%m-%d %H:%M:%S',
+        handlers=[
+            logging.FileHandler(LOG_FILENAME),
+            console_handler
+        ]
     )
 setup_logging()
 
@@ -57,7 +68,8 @@ ICE_CONFIG = RTCConfiguration(
     iceServers=ICE_SERVERS
 )
 
-SERVER_URL = "ws://10.10.230.5:9000"
+SERVER_URL = "wss://messenger-server.fly.dev"
+
 
 class IncorrectRequestTypeError(Exception):
     """Exception which is raised when request with incorrect type is received"""
@@ -524,16 +536,16 @@ class Connection:
         if not self.is_connected_websocket:
             await self.connect_to_server(public_key)
 
-        if self.p2p_connection_state == "connecting":
-            try:
-                await asyncio.wait_for(self.is_p2p_connected.wait(), 10)
-            except asyncio.TimeoutError:
-                print("Connection timeout in Connection.connect().")
-                self.is_p2p_connected.clear()
-                self.p2p_connection_state = "disconnected"
-                self.is_p2p_connection_failed = True
+        # if self.p2p_connection_state == "connecting":
+        #     try:
+        #         await asyncio.wait_for(self.is_p2p_connected.wait(), 10)
+        #     except asyncio.TimeoutError:
+        #         print("Connection timeout in Connection.connect().")
+        #         self.is_p2p_connected.clear()
+        #         self.p2p_connection_state = "disconnected"
+        #         self.is_p2p_connection_failed = True
 
-        peer_public_key = await self.connect_to_peer()
+        # peer_public_key = await self.connect_to_peer()
         return peer_public_key
 
 
@@ -541,7 +553,13 @@ class Chat:
     """Class to represent chat between two users"""
     DATABASE_URL = os.getenv("DATABASE_URL_CLIENT")
 
-    def __init__(self, user_id: str, target_user_id: str, long_term_private_key: str, long_term_public_key: str, on_message_callback: callable=None):
+    def __init__(self,
+                user_id: str,
+                target_user_id: str,
+                long_term_private_key: str,
+                long_term_public_key: str,
+                on_message_callback: callable=None):
+
         self.user_id = user_id
         self.target_user_id = target_user_id
         self.__on_message_callback: callable = on_message_callback
@@ -577,14 +595,14 @@ class Chat:
                 message = message["message"]
 
             message_obj = Message.from_string(message)
-            
-            if hasattr(self, '_Chat__on_message_save_callback') and callable(self._Chat__on_message_save_callback):
-                asyncio.create_task(self._Chat__on_message_save_callback(message_obj, is_outgoing=False))
-    
+
+            # if hasattr(self, '_Chat__on_message_save_callback') and callable(self._Chat__on_message_save_callback):
+            #     asyncio.create_task(self._Chat__on_message_save_callback(message_obj, is_outgoing=False))
+
             if self.__on_message_callback:
                 self.__on_message_callback(message_obj, self.target_user_id)
-            
-            print(f"Message received and saved: {message_obj}")
+
+            # print(f"Message received and saved: {message_obj}")
 
     async def __send_message_to_server(self, message: Message, encryption: str):
         message_json = message.json_string
@@ -620,24 +638,25 @@ class Chat:
             await self.__send_message_to_server(message, encryption="long_term_public_key")
             return
 
-        if connection.is_p2p_connection_failed:
+        else:
             await self.__send_message_to_server(message, encryption="public_key")
             return
 
-        if connection.p2p_connection_state == "connected":
-            connection.data_channel.send(message.json_string)
-            return
+        # if connection.is_p2p_connection_failed:
+        #     await self.__send_message_to_server(message, encryption="public_key")
+        #     return
 
-        raise ValueError("Unexpected connection state.")
+        # if connection.p2p_connection_state == "connected":
+        #     connection.data_channel.send(message.json_string)
+        #     return
+
+        # raise ValueError("Unexpected connection state.")
 
     async def __send_message_loop(self):
         """If message queue is not empty gets message from it and sends it"""
         while True:
             message = await self.__send_message_queue.get()
             await self.__send_message_to_peer(message)
-
-
-        print(f"Chat with {self.target_user_id} closed")
 
     async def open(self):
         """Opens and runs chat"""
@@ -689,21 +708,15 @@ class Chat:
 
         self.is_closed.set()
 
-    def send_message(self, message: str):
+    def send_message(self, message: Message):
         """Sends message to the target user"""
         try:
-            message_obj = Message(
-                message_type="message",
-                user_id=self.user_id,
-                target_user_id=self.target_user_id,
-                content=message
-            )
 
             # asyncio.create_task(self.__save_message_to_db(message_obj, is_outgoing=True))
-            if hasattr(self, '__on_message_save_callback') and callable(self.__on_message_save_callback):
-                asyncio.create_task(self.__on_message_save_callback(message_obj, is_outgoing=True))
+            # if hasattr(self, '__on_message_save_callback') and callable(self.__on_message_save_callback):
+            #     asyncio.create_task(self.__on_message_save_callback(message_obj, is_outgoing=True))
 
-            self.__send_message_queue.put_nowait(message_obj)
+            self.__send_message_queue.put_nowait(message)
 
             print(f"Message queued for sending to {self.target_user_id}")
         except Exception as e:
@@ -738,11 +751,10 @@ class App:
         self.user_id = None
         self.websocket = None
         self.__chats_loaded = False
-        self.__password = "123456789"
         self.__futures = {}
         self.__public_key = None
         self.__private_key = None
-        self.__symetric_encryption = SymetricEncryption(self.__password)
+        self.__symmetric_encryption = SymmetricEncryption()
 
         self.__requests_queue = asyncio.Queue()
         # Create a separate router for API endpoints FIRST
@@ -753,7 +765,10 @@ class App:
         self.__messages = {}  # Format: {target_user_id: [messages]}
 
         # User ID event to signal when user ID is set
-        self.__user_id_set = threading.Event()
+        self.__user_id_set = asyncio.Event()
+        self.__application_close_event = asyncio.Event()
+        self.__server_task = None
+        self.__close_initialized = False
 
         # Setup API routes BEFORE including router
         self.__setup_api_routes()
@@ -772,8 +787,9 @@ class App:
 
         # Add root redirect
         @self.api.get("/")
-        def redirect_to_chat():
-            return RedirectResponse(url="/chat/chat.html")
+        def redirect_to_registration():
+            return RedirectResponse(url="auth/registration.html")
+
 
         # Mount static files LAST - this ensures API routes take priority
         frontend_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend")
@@ -788,24 +804,28 @@ class App:
             try:
                 data = await request.json()
                 user_id = data.get("user_id")
-                print(f"Login attempt with user_id: {user_id}")
+                password = data.get("password")
+
+                if not user_id or not password:
+                    raise HTTPException(status_code=400, detail="Missing user_id or password")
+
                 self.user_id = user_id
+                print(f"Setting password: {password}")
+                self.__symmetric_encryption.set_password(password)
+                print("Password was set")
                 self.__user_id_set.set()
-                print("Login successful")
                 return {"status": "success", "user_id": user_id}
             except Exception as e:
-                print(f"Login error: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
 
-    
         @self.__api_router.get("/get_messages/{user_id}/{target_user_id}")
         async def get_messages(user_id: str, target_user_id: str):
             """Get messages between user_id and target_user_id"""
             if user_id != self.user_id:
                 print(f"User mismatch: {user_id} vs {self.user_id}")
                 raise HTTPException(status_code=403, detail="Unauthorized access")
-    
-            return await self.get_message_history(user_id, target_user_id)
+
+            return await self.get_messages_from_db(user_id, target_user_id)
 
         @self.__api_router.get("/get_new_messages/{user_id}/{target_user_id}/{last_timestamp}")
         async def get_new_messages(user_id: str, target_user_id: str, last_timestamp: str):
@@ -814,11 +834,10 @@ class App:
                 raise HTTPException(status_code=403, detail="Unauthorized access")
 
             try:
-                # Змінюємо на використання методу з App
                 return await self.get_new_messages_after(user_id, target_user_id, last_timestamp)
             except Exception as e:
                 print(f"Error getting new messages: {str(e)}")
-            raise HTTPException(status_code=500, detail=str(e))
+                raise HTTPException(status_code=500, detail=str(e))
 
 
         @self.__api_router.post("/send_message")
@@ -871,13 +890,18 @@ class App:
             return list(self.__chats.keys())
 
         @self.__api_router.post("/add_chat")
-        async def add_chat(data: ChatRequest):
+        async def create_chat(data: ChatRequest):
+            print("Adding chat")
+            target_user_id = data.target_user_id
             try:
-                # Validate the user
-                if data.user_id != self.user_id:
-                    raise HTTPException(status_code=403, detail="Unauthorized access")
+                if (target_user_id == self.user_id or
+                    not await self.__check_user_existance(target_user_id)):
+                    print("Invalid user id")
+                    return {"status": "invalid_user_id"}
 
                 await self.on_chat_creation(data.target_user_id)
+                await self.add_chat(data.target_user_id)
+
                 print(f"Chat with {data.target_user_id} added")
                 return {"status": "chat added"}
             except Exception as e:
@@ -885,10 +909,24 @@ class App:
 
         @self.__api_router.get("/new_chats")
         async def get_new_chats():
-            """Return new chats that were created by other users and clear the list"""
-            new_chats = self.__new_chats.copy()
-            self.__new_chats = []  # Clear the list after retrieval
-            return new_chats
+            """Return chats created by others since last poll"""
+            new = list(self.__new_chats)
+            self.__new_chats.clear()
+            return {"new_chats": new}
+
+        @self.__api_router.post("/close_application")
+        async def close_application():
+            """Close the application"""
+            try:
+                self.__application_close_event.set()
+                return {"status": "closing"}
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+
+    async def __wait_for_close(self):
+        await self.__application_close_event.wait()
+        self.__close_initialized = True
+        await self.close()
 
     async def save_chat_to_db(self, target_user_id: str | list[str]):
         """Adds chat with the target user to database"""
@@ -897,7 +935,7 @@ class App:
             target_user_id = [target_user_id]
         try:
             for user_id in target_user_id:
-                user_id = self.__symetric_encryption.encrypt(user_id)
+                user_id = self.__symmetric_encryption.encrypt(user_id)
                 await conn.execute("""--sql
                     INSERT INTO chats (target_user_id)
                     VALUES ($1)
@@ -906,36 +944,23 @@ class App:
         finally:
             await conn.close()
 
-    async def save_message_to_db(self, message: Message, is_outgoing: bool = True) -> None:
-        """Saves message to the database"""
+    async def save_message_to_db(self, message: Message, is_outgoing: bool) -> None:
+        """Saves message to the database as encrypted json string"""
         try:
             user_id = message.user_id
             target_user_id = message.target_user_id
-            message_content = message.content
 
-            # user_id = self.__symetric_encryption.encrypt(user_id)
-            # target_user_id = self.__symetric_encryption.encrypt(target_user_id)
-            message_content = self.__symetric_encryption.encrypt(message_content)
+            message_json = message.json_string
+            message_json_encrypted = self.__symmetric_encryption.encrypt(message_json)
 
-            print(f"Saving message to database: {user_id} -> {target_user_id}: '{message_content[:20]}...'")
+            print(f"Saving message to database: {user_id} -> {target_user_id}")
 
             conn = await asyncpg.connect(self.DATABASE_URL)
             try:
-                # await conn.execute("""--sql
-                #     CREATE TABLE IF NOT EXISTS messages (
-                #         id SERIAL PRIMARY KEY,
-                #         user_id TEXT NOT NULL,
-                #         target_user_id TEXT NOT NULL,
-                #         message TEXT NOT NULL,
-                #         is_outgoing BOOLEAN DEFAULT TRUE,
-                #         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                #     );
-                # """)
-
                 await conn.execute("""--sql
                     INSERT INTO messages (user_id, target_user_id, message, is_outgoing)
                     VALUES ($1, $2, $3, $4);
-                """, user_id, target_user_id, message_content, is_outgoing)
+                """, user_id, target_user_id, message_json_encrypted, is_outgoing)
 
                 print(f"Message from {user_id} to {target_user_id} saved to database")
             finally:
@@ -943,22 +968,11 @@ class App:
         except Exception as e:
             print(f"Error saving message to database: {str(e)}")
 
-    async def get_messages_from_db(self, user_id: str, target_user_id: str, limit=100) -> list:
+    async def get_messages_from_db(self, user_id: str, target_user_id: str, limit=100) -> list[dict]:
         """Gets messages between users from the database"""
         try:
             conn = await asyncpg.connect(self.DATABASE_URL)
             try:
-                # await conn.execute("""--sql
-                #     CREATE TABLE IF NOT EXISTS messages (
-                #         id SERIAL PRIMARY KEY,
-                #         user_id TEXT NOT NULL,
-                #         target_user_id TEXT NOT NULL,
-                #         message TEXT NOT NULL,
-                #         is_outgoing BOOLEAN DEFAULT TRUE,
-                #         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                #     );
-                # """)
-
                 rows = await conn.fetch("""--sql
                     SELECT * FROM messages
                     WHERE (user_id = $1 AND target_user_id = $2)
@@ -971,31 +985,30 @@ class App:
 
                 messages = []
                 for row in rows:
-                    is_from_me = row["user_id"] == user_id
+                    is_from_me = row["is_outgoing"]
+
+                    message_decrypted = self.__symmetric_encryption.decrypt(row["message"])
+                    message_obj = Message.from_string(message_decrypted)
+                    message_content = message_obj.content
 
                     messages.append({
-                        "sender": "me" if is_from_me else "you",
-                        "text": self.__symetric_encryption.decrypt(row["message"]),
-                        "timestamp": row["timestamp"].isoformat() if hasattr(row["timestamp"], "isoformat") else str(row["timestamp"]),
-                        "id": str(row["id"])
+                        "sender": "me" if is_from_me else "peer",
+                        "text": message_content,
+                        "timestamp": format_db_timestamp(row["timestamp"]),
                     })
 
                 return messages
             finally:
                 await conn.close()
         except Exception as e:
-            print(f"Error retrieving messages from database: {str(e)}")
+            print(f"Error while retrieving messages from database: {str(e)}")
             return []
-
-    async def get_message_history(self, user_id: str, target_user_id: str):
-        """Public method to get message history from database"""
-        return await self.get_messages_from_db(user_id, target_user_id)
 
     async def get_new_messages_after(self, user_id: str, target_user_id: str, timestamp):
         """Get messages between users that are newer than specified timestamp"""
+        normalized_timestamp = format_db_timestamp(timestamp)
+
         try:
-            if hasattr(timestamp, 'isoformat'):
-                timestamp = timestamp.isoformat()
             conn = await asyncpg.connect(self.DATABASE_URL)
 
             try:
@@ -1004,19 +1017,23 @@ class App:
                     WHERE ((user_id = $1 AND target_user_id = $2)
                     OR (user_id = $2 AND target_user_id = $1))
                     AND timestamp > $3::text::timestamp
+                    AND is_outgoing = FALSE
                     ORDER BY timestamp ASC;
-                """, user_id, target_user_id, timestamp)
+                """, user_id, target_user_id, normalized_timestamp)
 
                 messages = []
                 for row in rows:
-                    is_from_me = row['user_id'] == user_id
+                    message_decrypted = self.__symmetric_encryption.decrypt(row["message"])
+                    message_obj = Message.from_string(message_decrypted)
+                    message_content = message_obj.content
+
                     messages.append({
-                        "sender": "me" if is_from_me else "you",
-                        "text": self.__symetric_encryption.decrypt(row['message']),
+                        "sender": "peer",
+                        "text": message_content,
                         "timestamp": row['timestamp'].isoformat(),
                         "id": str(row['id'])
                     })
-                    
+
                 return messages
             finally:
                 await conn.close()
@@ -1054,7 +1071,7 @@ class App:
         del self.__chats[target_user_id]
 
         # remove chat from the database
-        target_user_id = self.__symetric_encryption.encrypt(target_user_id)
+        target_user_id = self.__symmetric_encryption.encrypt(target_user_id)
         conn = await asyncpg.connect(self.DATABASE_URL)
         try:
             await conn.execute("""--sql
@@ -1076,11 +1093,20 @@ class App:
             await conn.close()
 
         print(f"Chats from database: {chats}")
-        chats = [self.__symetric_encryption.decrypt(chat["target_user_id"]) for chat in chats]
+        chats = [self.__symmetric_encryption.decrypt(chat["target_user_id"]) for chat in chats]
         return chats
 
     def send_message(self, target_user_id: str, message: str):
         """Sends message to the target user"""
+        message = Message(
+            message_type="message",
+            user_id=self.user_id,
+            target_user_id=target_user_id,
+            content=message
+        )
+
+        asyncio.create_task(self.save_message_to_db(message, is_outgoing=True))
+
         if target_user_id in self.__chats:
             chat = self.__chats[target_user_id]
             chat.send_message(message)
@@ -1094,9 +1120,10 @@ class App:
 
         # Create message entry
         message_entry = {
-            "sender": "them",  # Message is from the other user
+            "sender": "peer",  # Message is from the other user
             "text": message_text,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": create_timestamp(),
+            "id": target_user_id
         }
 
         # Store message in memory
@@ -1104,7 +1131,22 @@ class App:
             self.__messages[target_user_id] = []
         self.__messages[target_user_id].append(message_entry)
 
+        asyncio.create_task(self.save_message_to_db(message, is_outgoing=False))
+
         print(f"Received message from {target_user_id}: {message_text}")
+
+    async def __check_user_existance(self, user_id: str) -> bool:
+        print("Checking user existance...")
+        check_user_existance_request = Request(
+            request_type="check_user_existance_request",
+            user_id=self.user_id,
+            content={"target_user_id": user_id}
+        )
+        self.__futures["check_user_existance_request"] = asyncio.Future()
+        await self.websocket.send(check_user_existance_request.json_string)
+        user_existance_response = await self.__futures["check_user_existance_request"]
+        print(f"User existance status: {user_existance_response.content['user_existance']}")
+        return user_existance_response.content["user_existance"]
 
     async def __receive_server_requests(self):
         """Function which receives requests from server and adds them to the requests queue"""
@@ -1140,8 +1182,6 @@ class App:
 
     async def on_chat_creation(self, target_user_id: str):
         """Function which is called when chat is created"""
-        await self.add_chat(target_user_id)
-
         create_chat_request = Request(
             request_type="create_chat_request",
             user_id=self.user_id,
@@ -1150,35 +1190,70 @@ class App:
         await self.websocket.send(create_chat_request.json_string)
         print(f"Chat creation request sent: {create_chat_request.json_string}")
 
+    async def start_server(self):
+        """Start the Hypercorn server asynchronously"""
+        config = Config()
+        config.bind = ["0.0.0.0:8000"]
+
+        self.__server_task = asyncio.create_task(serve(self.api, config))
+
+        await asyncio.sleep(1)
+
+        print("API server started on http://localhost:8000")
+
+    async def stop_server(self):
+        """Stop the Hypercorn server gracefully"""
+        if self.__server_task is not None:
+            self.__server_task.cancel()
+
+            try:
+                await self.__server_task
+            except asyncio.CancelledError:
+                print("Hypercorn server shutdown successfully")
+            finally:
+                self.__server_task = None
+
     async def open(self):
         """Function opening application"""
-        # Start the API server
-        def start_server():
-            uvicorn.run(
-                self.api,
-                host="0.0.0.0",
-                port=8000,
-                ssl_certfile="/app/certs/cert.pem",
-                ssl_keyfile="/app/certs/key.pem",
-            )
-
-        server_thread = threading.Thread(target=start_server)
-        server_thread.daemon = True
-        server_thread.start()
-
-        print("API server started on https://localhost:8000")
+        await self.start_server()
         print("Waiting for user login...")
 
         # Wait for user ID to be set from the frontend
-        self.__user_id_set.wait()
+        await self.__user_id_set.wait()
+        asyncio.create_task(self.__wait_for_close())
         print(f"User logged in: {self.user_id}")
 
-        self.websocket = await websockets.connect(SERVER_URL)
+        if self.__close_initialized or self.__application_close_event.is_set():
+            print("Application is closing, skipping websocket connection.")
+            return
+
+        try:
+            print(f"Attempting to connect to {SERVER_URL}...")
+            ssl_context = ssl.create_default_context()
+
+            websocket = await asyncio.wait_for(
+                websockets.connect(
+                    SERVER_URL,
+                    ssl=ssl_context,
+                    server_hostname="messenger-server.fly.dev"
+                ),
+                timeout=10
+            )
+
+            print("Connected to websocket server")
+            self.websocket = websocket
+
+        except asyncio.TimeoutError:
+            print("WebSocket connection timed out after 10 seconds")
+            return
+        except Exception as e:
+            print(f"WebSocket connection error: {e}")
+            return
 
         asyncio.create_task(self.__receive_server_requests())
         asyncio.create_task(self.__handle_server_requests())
 
-        self.__private_key, self.__public_key = Encryption.load_long_term_keys(self.__password)
+        self.__private_key, self.__public_key = Encryption.load_long_term_keys(self.__symmetric_encryption)
         login_request = Request(
             request_type="login_request",
             user_id=self.user_id,
@@ -1222,12 +1297,19 @@ class App:
 
     async def close(self):
         """Function closing application"""
+        if self.__close_initialized:
+            return
         print("Closing application")
-        await self.websocket.close()
+        if self.websocket is not None:
+            await self.websocket.close()
+            self.websocket = None
 
         for chat in self.__chats.values():
             asyncio.create_task(chat.close())
 
         if self.__chats:
             await asyncio.gather(*[chat.is_closed.wait() for chat in self.__chats.values()])
+
+        await self.stop_server()
+
         print("Application closed")

@@ -1,0 +1,23 @@
+# fly.toml app configuration file generated for messenger-server on 2025-05-01T02:08:33+03:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'messenger-server'
+primary_region = 'waw'
+
+[build]
+  dockerfile = 'docker/server.Dockerfile'
+
+[http_service]
+  internal_port = 9000
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1

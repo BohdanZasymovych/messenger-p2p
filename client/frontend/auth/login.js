@@ -1,61 +1,96 @@
-const socket = new WebSocket("ws://localhost:8000");
+// 🔐 Хешування пароля через jsSHA (SHA-256, HEX)
+function hashPasswordSHA256(password) {
+  const shaObj = new jsSHA("SHA-256", "TEXT", { encoding: "UTF8" });
+  shaObj.update(password);
+  return shaObj.getHash("HEX");
+}
 
-socket.onopen = () => {
-    console.log("✅ WebSocket connected");
-};
+document.querySelector(".login-form").addEventListener("submit", function (event) {
+  event.preventDefault();
 
-// Обробка відповідей від сервера
-socket.onmessage = (event) => {
-    console.log("📥 Response received:", event.data);
-    const response = JSON.parse(event.data);
+  const email = document.querySelector("input[name='email']").value.trim();
+  const password = document.querySelector("input[name='password']").value;
 
-    if (response.type === "get_user_info_from_data_base_response") {
-        if (response.content.status === "success" && response.content.user_exists) {
-            console.log("✅ Login successful. Redirecting...");
-            setTimeout(() => {
-                socket.close();
-                window.location.href = "chat.html";
-            }, 300);
-        } else {
-            alert("❌ Login failed: " + (response.content.message || "Incorrect login credentials."));
-            socket.close();
-        }
-    }
-};
+  if (!email || !password) {
+    alert("Please fill in all fields.");
+    return;
+  }
 
-socket.onerror = (error) => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
+
+  if (!emailRegex.test(email)) {
+    alert("❌ Please enter a valid email address.");
+    return;
+  }
+
+  if (!passwordRegex.test(password)) {
+    alert("❌ Password must contain at least 8 characters, including uppercase, lowercase, number, and special symbol.");
+    return;
+  }
+
+  // 🛡️ Хешуємо пароль перед надсиланням
+  const hashedPassword = hashPasswordSHA256(password);
+
+  const socket = new WebSocket("wss://messenger-server.fly.dev");
+
+  socket.onerror = (error) => {
     console.error("❌ WebSocket error:", error);
-};
+    alert("Failed to connect to server.");
+  };
 
-socket.onclose = () => {
-    console.warn("🔌 WebSocket connection closed");
-};
+  socket.onopen = () => {
+    console.log("✅ WebSocket connected");
 
-// Обробка форми логіну
-document.querySelector(".login-form").addEventListener("submit", async (e) => {
-    e.preventDefault();
-
-    const nickname = document.querySelector("input[name='nickname']").value;
-    const email = document.querySelector("input[name='email']").value;
-    const password = document.querySelector("input[name='password']").value;
-
-    const request = {
-        type: "get_user_info_from_data_base",
-        user_id: nickname, // 🔑 Обов’язково передаємо user_id
-        content: {
-            username: nickname,
-            email: email,
-            password: password
-        }
+    const loginRequest = {
+      type: "get_user_info_from_data_base",
+      user_id: "temp",
+      content: {
+        email: email,
+        password: hashedPassword
+      }
     };
 
-    if (socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify(request));
-        console.log("📤 Sent login request:", request);
-    } else {
-        socket.addEventListener("open", () => {
-            socket.send(JSON.stringify(request));
-            console.log("📤 Sent login request after open:", request);
-        });
+    socket.send(JSON.stringify(loginRequest));
+    console.log("📤 Sent login request:", loginRequest);
+  };
+
+  socket.onmessage = (event) => {
+    console.log("📥 Response received:", event.data);
+
+    let response;
+    try {
+      response = JSON.parse(event.data);
+    } catch (e) {
+      console.error("❌ Failed to parse server response:", e);
+      alert("Server returned invalid response.");
+      socket.close();
+      return;
     }
+
+    if (response.type === "get_user_info_from_data_base_response") {
+      if (response.content.status === "success" && response.content.user_exists) {
+        console.log("✅ Login successful");
+
+        const userId = response.content.user_id;
+
+        sessionStorage.setItem("user_id", userId);
+        sessionStorage.setItem("password", password); // plain — для використання в клієнті
+
+        setTimeout(() => {
+          socket.close();
+          window.location.href = "../chat/chat.html";
+        }, 300);
+      } else {
+        alert("❌ Login failed: " + (response.content.message || "Incorrect email or password."));
+        socket.close();
+      }
+    } else {
+      console.warn("ℹ️ Unexpected message type:", response.type);
+    }
+  };
+
+  socket.onclose = () => {
+    console.warn("🔌 WebSocket connection closed");
+  };
 });

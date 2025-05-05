@@ -9,7 +9,7 @@ import asyncpg
 from websockets.legacy.client import WebSocketClientProtocol
 from websockets.legacy.server import WebSocketServerProtocol
 
-from messages_requests import Request
+from request import Request
 
 
 WebSocket = Union[WebSocketClientProtocol, WebSocketServerProtocol]
@@ -71,12 +71,12 @@ class User:
 
 class Server:
     """Class to represent server which handles establishing connection between users"""
-    SERVER_DATABASE_URL = os.getenv("DATABASE_URL_SERVER")
+    SERVER_DATABASE_URL = os.getenv("DATABASE_URL")
 
     def __init__(self, ip: str, port: int):
         self.ip: str = ip
         self.port: int = port
-        self.__clients: dict[User] = {'1': User(), '2': User(), '3': User(), '4': User(), '5': User()} # user_id: User
+        self.__clients: dict[User] = {} # user_id: User
 
     async def __save_message_to_db(self, user_id: str, target_user_id: str, message: str) -> None:
         """Saves message to the database"""
@@ -144,12 +144,12 @@ class Server:
         finally:
             await conn.close()
 
-    async def __add_user_to_db(self, username: str, email: str, password: str) -> bool:
+    async def __add_user_to_db(self, user_id: str, email: str, password: str) -> bool:
         """
-        Adds user to the database with hashed password, if user with given username or email doesn't exist.
-        Returns True if user was added, False if already exists or error occurred.
+        Adds user to the database. Assumes password is already hashed via SHA-256 on the client.
+        Returns True if user was added, False if user already exists or error occurred.
         """
-        print(f"📥 Checking if user {username} or email {email} already exists...")
+        print(f"📥 Checking if user {user_id} or email {email} already exists...")
 
         try:
             conn = await asyncpg.connect(self.SERVER_DATABASE_URL)
@@ -157,8 +157,8 @@ class Server:
 
             try:
                 existing_user = await conn.fetchrow("""
-                    SELECT id FROM users WHERE username = $1 OR email = $2;
-                """, username, email)
+                    SELECT id FROM users WHERE user_id = $1 OR email = $2;
+                """, user_id, email)
                 print("📊 Existing user check complete.")
             except Exception as e:
                 print(f"❌ Error checking for existing user: {e}")
@@ -169,16 +169,14 @@ class Server:
                 return False
 
             try:
-                print("🔐 Hashing password...")
-                hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-                print("💾 Password hashed, inserting user...")
+                print("💾 Inserting user with client-side hashed password...")
 
                 await conn.execute("""
-                    INSERT INTO users (username, email, password)
+                    INSERT INTO users (user_id, email, password)
                     VALUES ($1, $2, $3);
-                """, username, email, hashed_password)
+                """, user_id, email, password)
 
-                print(f"✅ New user {username} inserted into DB.")
+                print(f"✅ New user {user_id} inserted into DB.")
                 return True
 
             except Exception as e:
@@ -193,25 +191,30 @@ class Server:
             print(f"❌ Failed to connect to DB: {conn_err}")
             return False
 
-    async def __get_user_info_from_db(self, username: str, email: str, password: str) -> list:
+
+    async def __get_user_info_from_db(self, email: str, password: str) -> dict | None:
         """
-        Gets user info by username and email and verifies the password.
-        Returns a dictionary with username, email, and password if credentials are valid.
+        Checks user credentials. Password is assumed to be hashed SHA-256 from client.
         """
         conn = await asyncpg.connect(self.SERVER_DATABASE_URL)
         try:
-            row = await conn.fetchrow("""--sql
-                SELECT public_key FROM public_keys
-                WHERE user_id = $1;
-            """, user_id)
+            row = await conn.fetchrow("""
+                SELECT user_id, email, password
+                FROM users
+                WHERE email = $1;
+            """, email)
 
             if row is None:
                 return None
 
-            print(f"Public key of user: {user_id} received from database.")
-            return row["public_key"]
+            stored_password = row["password"]
+            if password == stored_password:
+                return {"user_id": row["user_id"], "email": row["email"]}
+            else:
+                return None
         finally:
             await conn.close()
+
 
     def __disconnect_user(self, user_id: str):
         """Disconnect user with given user id"""
@@ -227,7 +230,7 @@ class Server:
         """Function which handles receiving and processing register_request from user"""
         target_user_id = data["target_user_id"]
         client = self.__clients[user_id]
-        target_client = self.__clients[target_user_id]
+        target_client = self.__clients.setdefault(target_user_id, User())
 
         public_key = data["public_key"]
 
@@ -432,24 +435,24 @@ class Server:
         await self.__clients[user_id].websocket.send(get_public_key_request.json_string)
 
     async def __handle_add_user_to_db_request(self, websocket, data: dict):
-        print("🟡 Entered __handle_add_user_to_db_request")  # 👈 Додаємо лог
+        print("🟡 Entered __handle_add_user_to_db_request")
 
-        username = data.get("username")
+        user_id = data.get("user_id")
         email = data.get("email")
         password = data.get("password")
 
-        print(f"🧾 Received data: username={username}, email={email}, password={'*' * len(password) if password else None}")
+        print(f"🧾 Received data: username={user_id}, email={email}, password={'*' * len(password) if password else None}")
 
-        if not username or not email or not password:
+        if not user_id or not email or not password:
             error_response = Request(
                 request_type="add_user_to_data_base_response",
                 content={"status": "error", "message": "Missing username, email, or password."}
             )
             await websocket.send(error_response.json_string)
-            print("❌ Sent error response: missing fields")  # 👈
+            print("❌ Sent error response: missing fields")
             return
 
-        success = await self.__add_user_to_db(username, email, password)
+        success = await self.__add_user_to_db(user_id, email, password)
 
         if success:
             success_response = Request(
@@ -465,31 +468,64 @@ class Server:
         print("📤 Sending response to client:", success_response.json_string)
         await websocket.send(success_response.json_string)
 
+
     async def __handle_check_user_exists_request(self, websocket, data: dict):
         """
-        Handles request to check if user exists in the database by username, email and password.
-        Sends back a response with user_exists: True or False.
+        Handles login request using email and hashed password from client.
         """
-        username = data.get("username")
         email = data.get("email")
         password = data.get("password")
 
-        if not username or not email or not password:
+        if not email or not password:
             error_response = Request(
                 request_type="get_user_info_from_data_base_response",
-                content={"status": "error", "message": "Missing username, email or password."}
+                content={"status": "error", "message": "Missing email or password."}
             )
             await websocket.send(error_response.json_string)
             return
 
-        user_info = await self.__get_user_info_from_db(username, email, password)
+        user_info = await self.__get_user_info_from_db(email, password)
         user_exists = bool(user_info)
 
-        response = Request(
-            request_type="get_user_info_from_data_base",
-            content={"status": "success", "user_exists": user_exists}
+        if not user_exists:
+            error_response = Request(
+                request_type="get_user_info_from_data_base_response",
+                content={"status": "error", "message": "Invalid email or password."}
+            )
+            await websocket.send(error_response.json_string)
+            return
+
+        success_response = Request(
+            request_type="get_user_info_from_data_base_response",
+            content={
+                "status": "success",
+                "user_exists": True,
+                "user_id": user_info["user_id"],
+                "password": password  # ⬅️ hashed password from client
+            }
         )
-        await websocket.send(response.json_string)
+        await websocket.send(success_response.json_string)
+
+
+    async def __handle_user_existance_request(self, websocket, user_id: str, data: dict):
+        """Checks if user are registred on the server"""
+        target_user_id = data["target_user_id"]
+        try:
+            conn = await asyncpg.connect(self.SERVER_DATABASE_URL)
+
+            row = await conn.fetchval(
+                "SELECT EXISTS(SELECT 1 FROM users WHERE user_id = $1)",
+                target_user_id
+            )
+
+            user_existance_request = Request(
+                request_type="check_user_existance_request",
+                content={"target_user_id": target_user_id, "user_existance": bool(row)}
+            )
+            await websocket.send(user_existance_request.json_string)
+        finally:
+            await conn.close()
+
 
     async def __handle_login_request(self, websocket: WebSocket, user_id: str, data: dict):
         client = self.__clients.setdefault(user_id, User())
@@ -543,17 +579,9 @@ class Server:
 
     async def __websocket_handler(self, websocket):
         print("New client connected.")
-        # shared_user_id_request = await websocket.recv()
-        # shared_user_id_request = Request.from_string(shared_user_id_request)
-        # user_id = shared_user_id_request.user_id
-        # print(f"User id received: {user_id}")
         requests_queue = asyncio.Queue()
-
-        # client = self.__clients.setdefault(user_id, User())
-        # client.main_websocket = websocket
-        # client.is_online = True
-
         asyncio.create_task(self.__receive_requests(websocket, requests_queue))
+
         while True:
             request = await requests_queue.get()
             request_type = request.type
@@ -581,19 +609,17 @@ class Server:
                     await self.__handle_login_request(websocket, user_id, data)
                 case "create_chat_request":
                     await self.__handle_create_chat_request(user_id, data)
-
-                # case "ping_request":
-                #     print("Ping request received")
-                #     pong_response = Request(
-                #         request_type="ping_request",
-                #         content={}
-                #     )
-                #     await websocket.send(pong_response.json_string)
+                case "add_user_to_data_base":
+                    await self.__handle_add_user_to_db_request(websocket, data)
+                case "get_user_info_from_data_base":
+                    await self.__handle_check_user_exists_request(websocket, data)
+                case "check_user_existance_request":
+                    await self.__handle_user_existance_request(websocket, user_id, data)
                 case _:
                     raise IncorrectRequestTypeError(f"Incorrect request type in __websocket_handler ({request_type}).")
 
     async def run(self):
         """Runs websocket server"""
         async with websockets.serve(self.__websocket_handler, self.ip, self.port):
-            print(f"WebSocket server is running on ws://{self.ip}:{self.port}")
+            print("WebSocket server is running")
             await asyncio.Future()

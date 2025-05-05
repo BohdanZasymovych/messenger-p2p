@@ -1,0 +1,28 @@
+name: Deploy server to Fly
+
+on:
+  push:
+    branches:
+      - server-deployment
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install flyctl
+        run: |
+          curl -L https://fly.io/install.sh | sh
+
+      - name: Add flyctl to PATH
+        run: echo "$HOME/.fly/bin" >> $GITHUB_PATH
+
+      - name: Authenticate to Fly
+        run: flyctl auth login --access-token "${{ secrets.FLY_API_TOKEN }}"
+
+      - name: Deploy to Fly
+        working-directory: server
+        run: flyctl deploy

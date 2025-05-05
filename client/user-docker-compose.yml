@@ -21,6 +21,7 @@ services:
       dockerfile: docker/messenger.Dockerfile
     container_name: messenger_app
     environment:
+      PYTHONUNBUFFERED: 1
       DATABASE_URL_CLIENT: "${DATABASE_URL_CLIENT}"
     sysctls:
       net.ipv4.ip_local_port_range: "40000 40100"

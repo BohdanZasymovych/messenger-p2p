@@ -2,6 +2,8 @@
 **/.venv
 **/venv
 **/env
+**/.venv_server
+**/.venv_client
 
 # Logs
 **/*.log
@@ -16,5 +18,12 @@
 **/keys/
 **/certs/
 
-# Specific files
-**/docker-compose-user-separate.yml
+# Mac OS system files
+.DS_Store
+**/.DS_Store
+
+# Files to download application
+**/downloads/
+
+# Test files
+**/test_*

@@ -10,6 +10,7 @@ async def main():
         await app.open()
     finally:
         await app.close()
+        # await app.stop_server()
 
 if __name__ == "__main__":
     asyncio.run(main())
