@@ -97,6 +97,94 @@
       font-size: 14px;
       color: #dddddd;
     }
+    .download-section {
+      padding: 60px 40px;
+      text-align: center;
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 20px;
+      margin: 0 40px 60px 40px;
+    }
+    .download-section h2 {
+      font-size: 36px;
+      margin-bottom: 20px;
+      color: #ffffff;
+    }
+    .download-section p {
+      font-size: 18px;
+      margin-bottom: 30px;
+      max-width: 800px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .download-steps {
+      display: flex;
+      justify-content: space-around;
+      flex-wrap: wrap;
+      margin-bottom: 40px;
+      gap: 20px;
+    }
+    .step {
+      background: rgba(255, 255, 255, 0.1);
+      padding: 20px;
+      border-radius: 10px;
+      width: 300px;
+      text-align: center;
+      transition: transform 0.3s;
+    }
+    .step:hover {
+      transform: translateY(-5px);
+    }
+    .step h3 {
+      margin-bottom: 15px;
+      color: #1E90FF;
+    }
+    .step p {
+      font-size: 16px;
+      margin-bottom: 15px;
+    }
+    .download-buttons {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      flex-wrap: wrap;
+      margin-top: 30px;
+    }
+    .download-button {
+      display: inline-block;
+      padding: 15px 30px;
+      background: #1E90FF;
+      color: white;
+      text-decoration: none;
+      border-radius: 30px;
+      font-weight: bold;
+      transition: background 0.3s, transform 0.3s;
+    }
+    .download-button:hover {
+      background: #0c7cd5;
+      transform: scale(1.05);
+    }
+    .docker-button {
+      background: #2496ED;
+    }
+    .windows-button {
+      background: #0078D7;
+    }
+    .mac-button {
+      background: #999;
+    }
+    .linux-button {
+      background: #E95420;
+    }
+    .note {
+      background: rgba(30, 144, 255, 0.2);
+      padding: 15px;
+      border-radius: 10px;
+      margin-top: 30px;
+      font-size: 14px;
+      max-width: 800px;
+      margin-left: auto;
+      margin-right: auto;
+    }
     footer {
       background-color: rgba(0, 0, 0, 0.7);
       padding: 20px;
@@ -110,7 +198,7 @@
   <div class="navbar">
     <img src="photo_2024-12-02_10-34-48.jpg" alt="Logo">
     <div class="nav-links">
-      <a href="DownloadChecker.rar" download>Download</a>
+      <a href="#download">Download</a>
     </div>
   </div>
 
@@ -118,6 +206,7 @@
     <div class="hero-content">
       <h1>Security - our priority</h1>
       <p>Open-source, decentralized, and end-to-end encrypted platform for communication you can trust.</p>
+      <a href="#download" class="download-button">Download Now</a>
     </div>
     <div class="hero-image">
       <img src="photo_2025-04-07_00-27-41.jpg" alt="Hero Image">
@@ -136,6 +225,39 @@
     <div class="feature-box">
       <h3>Map</h3>
       <p>Real-time location sharing for seamless and secure navigation</p>
+    </div>
+  </div>
+
+  <div id="download" class="download-section">
+    <h2>Download Security App</h2>
+    <p>Follow these simple steps to get started with our secure messaging platform</p>
+    
+    <div class="download-steps">
+      <div class="step">
+        <h3>Step 1</h3>
+        <p>Download and install Docker Desktop for your operating system</p>
+        <a href="https://www.docker.com/products/docker-desktop" class="download-button docker-button" target="_blank">Get Docker</a>
+      </div>
+      
+      <div class="step">
+        <h3>Step 2</h3>
+        <p>Download Security App for your operating system</p>
+        <div class="download-buttons">
+          <a href="P2P_Messenger_Windows.zip" class="download-button windows-button">Windows</a>
+          <a href="P2P_Messenger_macOS.zip" class="download-button mac-button">macOS</a>
+          <a href="P2P_Messenger_Linux.zip" class="download-button linux-button">Linux</a>
+        </div>
+      </div>
+      
+      <div class="step">
+        <h3>Step 3</h3>
+        <p>Extract the downloaded file and run the app</p>
+        <p>The app will open in your default browser automatically</p>
+      </div>
+    </div>
+    
+    <div class="note">
+      <strong>Note:</strong> First launch may take a few minutes as Docker downloads necessary components. Make sure Docker Desktop is running before launching the app.
     </div>
   </div>
 
