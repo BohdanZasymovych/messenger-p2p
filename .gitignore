@@ -23,7 +23,7 @@
 **/.DS_Store
 
 # Files to download application
-**/downloads/
+# **/downloads/
 
 # Test files
 **/test_*
